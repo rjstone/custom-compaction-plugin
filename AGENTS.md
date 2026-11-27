@@ -50,7 +50,7 @@ Releasing `vX.Y.Z`:
    maintainer. `.github/workflows/release.yml` then publishes a GitHub Release with git-cliff's
    notes for that tag.
 4. The `rjstone/plugin-marketplace` update job picks up the new tag: at once through this repo's
-   `.github/workflows/notify-marketplace.yml` (needs the `MARKETPLACE_APP_ID` variable and
+   `.github/workflows/notify-marketplace.yml` (needs the `MARKETPLACE_APP_CLIENT_ID` variable (the App's Client ID) and
    `MARKETPLACE_APP_PRIVATE_KEY` secret; run it by hand from the Actions tab for an older tag), else at
    its daily run. It points the `custom-compaction@rjstone` entry at the new release.
 
