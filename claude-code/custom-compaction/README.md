@@ -105,7 +105,7 @@ Set these in `/config`, or in settings.json under
 | `stream` | `true` | server-sent events (OpenCode Go cuts non-streamed calls at 300 s) |
 | `keepMessages` | `6` | at most this many newest messages kept verbatim (the cut moves forward to the next clean point, see below) |
 | `maxSummaryTokens` | `8000` | summarizer reply cap |
-| `maxSummarizerInputTokens` | `256000` | most tokens per summarizer request (estimated at 4 characters per token). A longer transcript is summarized in parts with refine (see below). Match it to the summarizer's context window |
+| `maxSummarizerInputTokens` | `500000` | most tokens per summarizer request (estimated at 4 characters per token). A longer transcript is summarized in parts with refine (see below). Adjust per model: see [Choosing maxSummarizerInputTokens](#choosing-maxsummarizerinputtokens) |
 | `extraInstructions` | `""` | appended to the summarizer prompt every time |
 | `systemPromptFile` | `""` | the summarizer's system prompt, from a file (`~/` = home, relative = project root). See [Prompt files](#prompt-files) |
 | `steerPromptFile` | `""` | the instructions `steer` mode gives the built-in compaction, from a file |
@@ -113,6 +113,23 @@ Set these in `/config`, or in settings.json under
 | `autoTrigger` | `replace` | `replace`: also replace Claude Code's own mid-turn `auto` compactions (live-tested, 0.4.1+). `core`: leave them to core |
 | `applyToSubagents` | `false` | also replace subagent/fork compactions (`agentId` set) |
 | `saveSummaries` | `false` | write each summary to `.claude/custom-compaction/<session>-<ms>.md` under the cwd |
+
+### Choosing maxSummarizerInputTokens
+
+The default, 500,000 tokens (about 2 million characters at the 4-characters-per-token estimate), is
+the lowest input limit found across more than 10 summarizer models tested, many of them free tiers.
+It may need adjusting for the model you use, and usually it can go **higher**: check the model's
+context window and the provider's request limit, and leave room for the reply
+(`maxSummaryTokens`). A model with a smaller limit than this setting rejects the request, and the
+mod then falls back to the built-in compaction.
+
+Because transcripts that don't fit are summarized with **refine** (each request gets the summary so
+far plus the next part), the setting is also a quality knob, not only a limit. A lower value means
+more, smaller parts: each request is easier to attend to fully, at the cost of more calls and more
+rewriting of the running summary. A higher value means fewer, larger parts, which keeps more context
+together but relies on the model attending well across a very long input. Which works better depends
+on the model's attention over long inputs, so the best value for summary quality can be below the
+model's hard limit.
 
 ### Example: DeepSeek V4.1 Flash on OpenCode Go
 

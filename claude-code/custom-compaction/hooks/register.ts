@@ -104,7 +104,7 @@ function settingsFrom(options: Record<string, unknown>): Settings {
     saveSummaries: options.saveSummaries === true,
     systemPromptFile: typeof options.systemPromptFile === 'string' ? options.systemPromptFile.trim() : '',
     steerPromptFile: typeof options.steerPromptFile === 'string' ? options.steerPromptFile.trim() : '',
-    maxSummarizerInputTokens: clampInt(options.maxSummarizerInputTokens, 2_000, 4_000_000, 256_000),
+    maxSummarizerInputTokens: clampInt(options.maxSummarizerInputTokens, 2_000, 4_000_000, 500_000),
   }
 }
 
