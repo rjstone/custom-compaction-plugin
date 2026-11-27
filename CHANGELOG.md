@@ -10,6 +10,7 @@ commit history (see `cliff.toml`); don't edit by hand.
 - **claude-code:** Base URL endpoints, prompt files, per-compaction session id, refine ([1093d70](https://github.com/rjstone/custom-compaction-plugin/commit/1093d70208c737221d51fe7e32f2e5af3d0b8d5b))
 - **claude-code:** MaxSummarizerInputTokens defaults to 500k tokens ([a59dc24](https://github.com/rjstone/custom-compaction-plugin/commit/a59dc248c7597df7e9a6d4835b12e8c1699ecc2f))
 - **claude-code:** MaxSummarizerInputTokens minimum 128k; maxSummaryTokens default 16k ([e6ede83](https://github.com/rjstone/custom-compaction-plugin/commit/e6ede8368075de3b2946c9a733de4df234c47946))
+- **claude-code:** Warn on cut-off summaries; frame the summary as the model's own record ([bda62c5](https://github.com/rjstone/custom-compaction-plugin/commit/bda62c5351bcc76949c0d234d04b2debca63cdd0))
 
 ### Fixes
 
