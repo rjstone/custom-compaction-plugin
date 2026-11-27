@@ -10,6 +10,10 @@ commit history (see `cliff.toml`); don't edit by hand.
 - **claude-code:** Base URL endpoints, prompt files, per-compaction session id, refine ([1093d70](https://github.com/rjstone/custom-compaction-plugin/commit/1093d70208c737221d51fe7e32f2e5af3d0b8d5b))
 - **claude-code:** MaxSummarizerInputTokens defaults to 500k tokens ([a59dc24](https://github.com/rjstone/custom-compaction-plugin/commit/a59dc248c7597df7e9a6d4835b12e8c1699ecc2f))
 
+### Fixes
+
+- **claude-code:** Estimate 3 characters per token for the summarizer budget ([deb3223](https://github.com/rjstone/custom-compaction-plugin/commit/deb32231add3e68f0b03c8cd914c68fe48de7c81))
+
 ### Documentation
 
 - Install from the central marketplace (rjstone/plugin-marketplace) ([e47957f](https://github.com/rjstone/custom-compaction-plugin/commit/e47957f2a62608f5866e6d74e369c2c22d0bdd41))
