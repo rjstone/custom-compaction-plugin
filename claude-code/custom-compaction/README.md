@@ -104,8 +104,8 @@ Set these in `/config`, or in settings.json under
 | `timeoutSeconds` | `480` | whole endpoint call, 30-590 |
 | `stream` | `true` | server-sent events (OpenCode Go cuts non-streamed calls at 300 s) |
 | `keepMessages` | `6` | at most this many newest messages kept verbatim (the cut moves forward to the next clean point, see below) |
-| `maxSummaryTokens` | `8000` | summarizer reply cap |
-| `maxSummarizerInputTokens` | `500000` | most tokens per summarizer request (estimated at 3 characters per token). A longer transcript is summarized in parts with refine (see below). Adjust per model: see [Choosing maxSummarizerInputTokens](#choosing-maxsummarizerinputtokens) |
+| `maxSummaryTokens` | `16000` | summarizer reply cap (the most the summary can be) |
+| `maxSummarizerInputTokens` | `500000` | most tokens per summarizer request (estimated at 3 characters per token). A longer transcript is summarized in parts with refine (see below). Adjust per model: see [Choosing maxSummarizerInputTokens](#choosing-maxsummarizerinputtokens). Minimum 128000: a smaller value is raised to it |
 | `extraInstructions` | `""` | appended to the summarizer prompt every time |
 | `systemPromptFile` | `""` | the summarizer's system prompt, from a file (`~/` = home, relative = project root). See [Prompt files](#prompt-files) |
 | `steerPromptFile` | `""` | the instructions `steer` mode gives the built-in compaction, from a file |
@@ -123,7 +123,8 @@ transcripts: English prose is closer to 4, but transcripts are full of code, JSO
 mixed languages, which tokenize less efficiently, and tokenizers differ between models.
 It may need adjusting for the model you use, and usually it can go **higher**: check the model's
 context window and the provider's request limit, and leave room for the reply
-(`maxSummaryTokens`). A model with a smaller limit than this setting rejects the request, and the
+(`maxSummaryTokens`). The lowest accepted value is 128,000; anything smaller is raised to it. A model with a smaller
+limit than this setting rejects the request, and the
 mod then falls back to the built-in compaction.
 
 Because transcripts that don't fit are summarized with **refine** (each request gets the summary so

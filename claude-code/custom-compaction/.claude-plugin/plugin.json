@@ -105,12 +105,12 @@
       "type": "number",
       "title": "Summary token cap",
       "description": "maxTokens for the summarizer reply.",
-      "default": 8000
+      "default": 16000
     },
     "maxSummarizerInputTokens": {
       "type": "number",
       "title": "Summarizer input budget (tokens)",
-      "description": "Most tokens sent in one summarizer request (estimated at 3 characters per token). A longer transcript is summarized in parts with refine: each call gets the summary so far plus the next part.",
+      "description": "Most tokens sent in one summarizer request (estimated at 3 characters per token). A longer transcript is summarized in parts with refine: each call gets the summary so far plus the next part. Minimum 128000: a smaller value is raised to it.",
       "default": 500000
     },
     "extraInstructions": {

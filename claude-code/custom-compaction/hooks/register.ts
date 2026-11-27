@@ -98,7 +98,7 @@ function settingsFrom(options: Record<string, unknown>): Settings {
     timeoutSeconds: clampInt(options.timeoutSeconds, 30, 590, 480),
     stream: options.stream !== false,
     keepMessages: clampInt(options.keepMessages, 0, 200, 6),
-    maxSummaryTokens: clampInt(options.maxSummaryTokens, 512, 64_000, 8_000),
+    maxSummaryTokens: clampInt(options.maxSummaryTokens, 512, 64_000, 16_000),
     extraInstructions: typeof options.extraInstructions === 'string' ? options.extraInstructions : '',
     applyToSubagents: options.applyToSubagents === true,
     autoTrigger: options.autoTrigger === 'core' ? 'core' : 'replace',
@@ -106,7 +106,7 @@ function settingsFrom(options: Record<string, unknown>): Settings {
     saveSummaries: options.saveSummaries === true,
     systemPromptFile: typeof options.systemPromptFile === 'string' ? options.systemPromptFile.trim() : '',
     steerPromptFile: typeof options.steerPromptFile === 'string' ? options.steerPromptFile.trim() : '',
-    maxSummarizerInputTokens: clampInt(options.maxSummarizerInputTokens, 2_000, 4_000_000, 500_000),
+    maxSummarizerInputTokens: clampInt(options.maxSummarizerInputTokens, 128_000, 4_000_000, 500_000),
   }
 }
 

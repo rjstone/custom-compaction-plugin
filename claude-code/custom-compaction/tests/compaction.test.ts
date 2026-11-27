@@ -324,12 +324,13 @@ test('chunkBlocks: in order, nothing dropped, long blocks cut', async () => {
 })
 
 const LONG: SessionMessage[] = [
-  u('Start: ' + 'a'.repeat(5000)), a('Reply one ' + 'b'.repeat(5000)),
-  u('Middle: ' + 'c'.repeat(5000)), a('Reply two ' + 'd'.repeat(5000)),
+  // ~480k characters: over one part at the 128k-token minimum budget (~384k characters)
+  u('Start: ' + 'a'.repeat(120_000)), a('Reply one ' + 'b'.repeat(120_000)),
+  u('Middle: ' + 'c'.repeat(120_000)), a('Reply two ' + 'd'.repeat(120_000)),
   u('Last ask'), a('Last reply'),
 ]
 
-test('refine: a transcript over budget is summarized in parts, each with the summary so far', { options: { maxSummarizerInputTokens: 2000, maxSummaryTokens: 512, keepMessages: 2 } }, async ($, on) => {
+test('refine: a transcript over budget is summarized in parts, each with the summary so far', { options: { maxSummarizerInputTokens: 2000 /* raised to the 128k minimum */, maxSummaryTokens: 512, keepMessages: 2 } }, async ($, on) => {
   promptStubs(on)
   const prompts: string[] = []
   on('model.complete', (_, e) => { prompts.push(e.prompt); return { value: OK(`SUMMARY-${prompts.length}`) } as never })
@@ -357,7 +358,7 @@ test('prompt files: <project>/.claude/custom-compaction/system.md replaces the b
   expect(system).toBe('MY SYSTEM PROMPT')
 })
 
-test('endpoint refine: one fresh x-opencode-session for every call of a compaction', { options: { ...EP, endpoint: 'https://opencode.ai/inference/go/v1', extraHeaders: '', maxSummarizerInputTokens: 2000, maxSummaryTokens: 512, keepMessages: 2 } }, async ($, on) => {
+test('endpoint refine: one fresh x-opencode-session for every call of a compaction', { options: { ...EP, endpoint: 'https://opencode.ai/inference/go/v1', extraHeaders: '', maxSummarizerInputTokens: 2000 /* raised to the 128k minimum */, maxSummaryTokens: 512, keepMessages: 2 } }, async ($, on) => {
   const calls: string[][] = []
   on('process.run', (_, e: any) => { calls.push(e.argv); return { value: { exitCode: 0, stdout: SSE_OPENAI + STATUS_MARK + '200', stderr: '' } } as never })
   on('ui.toast', () => ({ value: undefined }) as never)
@@ -429,7 +430,7 @@ test('steer mode reads its instructions from steer.md', { options: { mode: 'stee
   expect(got).toContain('USER ARGS')
 })
 
-test('refine: a failure on part 2 falls back to the built-in compaction', { options: { maxSummarizerInputTokens: 2000, maxSummaryTokens: 512, keepMessages: 2 } }, async ($, on) => {
+test('refine: a failure on part 2 falls back to the built-in compaction', { options: { maxSummarizerInputTokens: 2000 /* raised to the 128k minimum */, maxSummaryTokens: 512, keepMessages: 2 } }, async ($, on) => {
   promptStubs(on)
   let calls = 0
   on('model.complete', () => {
@@ -444,4 +445,17 @@ test('refine: a failure on part 2 falls back to the built-in compaction', { opti
   expect(calls).toBe(2)
   expect(r.messages?.[0]?.text).toBe('BUILT-IN SUMMARY')
   expect(toasts.join(' ')).toContain('on part 2 of')
+})
+
+test('maxSummarizerInputTokens below 128k is raised to 128k (one part for a transcript that fits)', { options: { maxSummarizerInputTokens: 2000, keepMessages: 2 } }, async ($, on) => {
+  promptStubs(on)
+  let calls = 0
+  on('model.complete', () => { calls++; return { value: OK('S') } as never })
+  on('ui.toast', () => ({ value: undefined }) as never)
+  on('ui.log', () => ({ value: undefined }) as never)
+  on('session.compact', () => BUILTIN)
+  // ~60k characters: several parts at a literal 2000-token budget, one part at 128k
+  const mid: SessionMessage[] = [u('x'.repeat(30_000)), a('y'.repeat(30_000)), u('Last ask'), a('Last reply')]
+  await $.session.compact({ trigger: 'manual', messages: mid })
+  expect(calls).toBe(1)
 })
