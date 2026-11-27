@@ -105,7 +105,7 @@ Set these in `/config`, or in settings.json under
 | `stream` | `true` | server-sent events (OpenCode Go cuts non-streamed calls at 300 s) |
 | `keepMessages` | `6` | at most this many newest messages kept verbatim (the cut moves forward to the next clean point, see below) |
 | `maxSummaryTokens` | `8000` | summarizer reply cap |
-| `maxSummarizerInputTokens` | `500000` | most tokens per summarizer request (estimated at 4 characters per token). A longer transcript is summarized in parts with refine (see below). Adjust per model: see [Choosing maxSummarizerInputTokens](#choosing-maxsummarizerinputtokens) |
+| `maxSummarizerInputTokens` | `500000` | most tokens per summarizer request (estimated at 3 characters per token). A longer transcript is summarized in parts with refine (see below). Adjust per model: see [Choosing maxSummarizerInputTokens](#choosing-maxsummarizerinputtokens) |
 | `extraInstructions` | `""` | appended to the summarizer prompt every time |
 | `systemPromptFile` | `""` | the summarizer's system prompt, from a file (`~/` = home, relative = project root). See [Prompt files](#prompt-files) |
 | `steerPromptFile` | `""` | the instructions `steer` mode gives the built-in compaction, from a file |
@@ -116,8 +116,11 @@ Set these in `/config`, or in settings.json under
 
 ### Choosing maxSummarizerInputTokens
 
-The default, 500,000 tokens (about 2 million characters at the 4-characters-per-token estimate), is
-the lowest input limit found across more than 10 summarizer models tested, many of them free tiers.
+The default, 500,000 tokens, is the lowest input limit found across more than 10 summarizer models
+tested, many of them free tiers. The mod measures characters, not tokens, and converts at **3
+characters per token** (about 1.5 million characters for the default). That's a conservative
+estimate: English prose is closer to 4, but transcripts are full of code, JSON, paths and sometimes
+mixed languages, which tokenize less efficiently, and tokenizers differ between models.
 It may need adjusting for the model you use, and usually it can go **higher**: check the model's
 context window and the provider's request limit, and leave room for the reply
 (`maxSummaryTokens`). A model with a smaller limit than this setting rejects the request, and the
@@ -216,7 +219,7 @@ is also where `saveSummaries` writes. The built-in system prompt is a good start
 2. **Render the head** as plain text, one block per message. Each tool call shows
    its name and input (cut to 400 characters) and its result text (cut to 1,500).
    Nothing is dropped: if the rendered head doesn't fit one request
-   (`maxSummarizerInputTokens` x 4 characters, less the system prompt, the summary
+   (`maxSummarizerInputTokens` x 3 characters, less the system prompt, the summary
    so far and the prompt's own text), it is split into parts in order and
    summarized with **refine**: part 1 is summarized alone, then each next request
    gets the summary so far plus the next part and returns the updated summary
@@ -245,7 +248,7 @@ is also where `saveSummaries` writes. The built-in system prompt is a good start
   putting the summary in the assistant's voice.
 - **One transient endpoint failure** fell back to core as designed. A single
   retry before falling back might be worth it for a slow summarizer.
-- **Budgets are estimates.** Token counts are characters / 4; a summarizer with a
+- **Budgets are estimates.** Token counts are characters / 3; a summarizer with a
   much smaller window than `maxSummarizerInputTokens` will reject the request (and
   the mod falls back to core).
 - **Compacting earlier than Claude Code's threshold** needs a separate trigger

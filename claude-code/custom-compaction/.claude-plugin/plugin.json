@@ -110,7 +110,7 @@
     "maxSummarizerInputTokens": {
       "type": "number",
       "title": "Summarizer input budget (tokens)",
-      "description": "Most tokens sent in one summarizer request (estimated at 4 chars per token). A longer transcript is summarized in parts with refine: each call gets the summary so far plus the next part.",
+      "description": "Most tokens sent in one summarizer request (estimated at 3 characters per token). A longer transcript is summarized in parts with refine: each call gets the summary so far plus the next part.",
       "default": 500000
     },
     "extraInstructions": {

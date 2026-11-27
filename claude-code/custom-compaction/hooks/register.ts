@@ -42,8 +42,10 @@ type Settings = {
   maxSummarizerInputTokens: number
 }
 
-// Characters per token for budgets (a rough average for English and code).
-const CHARS_PER_TOKEN = 4
+// Characters per token for budgets: a conservative estimate. English prose is
+// closer to 4, but transcripts are full of code, JSON, paths and mixed
+// languages, which tokenize less efficiently.
+const CHARS_PER_TOKEN = 3
 const MAX_TOOL_INPUT_CHARS = 400
 const MAX_TOOL_RESULT_CHARS = 1_500
 
