@@ -22,6 +22,8 @@ commit history (see `cliff.toml`); don't edit by hand.
 ### Documentation
 
 - Install from the central marketplace (rjstone/plugin-marketplace) ([e47957f](https://github.com/rjstone/custom-compaction-plugin/commit/e47957f2a62608f5866e6d74e369c2c22d0bdd41))
+- Engine parentUuid bug reported via /feedback ([b9b1d38](https://github.com/rjstone/custom-compaction-plugin/commit/b9b1d38d6c4a9b1958e66c8f8cd5e3075981e887))
+- **claude-code:** AppendPlugins seats the mod after other plugins' compaction hooks ([0971def](https://github.com/rjstone/custom-compaction-plugin/commit/0971def1bdcfeff2f562fd898c8764a23a748b5e))
 
 ### Maintenance
 
