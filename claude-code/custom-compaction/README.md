@@ -16,7 +16,7 @@ threshold and prompt-too-long recovery (`auto`), a plugin's
 `$.session.compact()` (`plugin`) and the engine's background pre-computation
 (`precompute`, which is skipped in replace mode).
 
-Status: **prototype, live-tested, 0.6.0** (2026-11-27). It passes `claude plugin validate`
+Status: **prototype, live-tested, 0.7.0** (2026-11-27). It passes `claude plugin validate`
 and its unit tests (`claude plugin test`, 16/16) on Claude Code 2.1.332. In
 headless test sessions it has replaced `/compact` and Claude Code's own
 mid-turn auto compactions, with both the session's own model and an external
@@ -95,17 +95,20 @@ Set these in `/config`, or in settings.json under
 | --- | --- | --- |
 | `mode` | `replace` | `replace`, `steer` or `off` |
 | `model` | `sonnet` | summarizer model. Without `endpoint`: alias or full id, resolved like `--model`. With `endpoint`: the provider's model id |
-| `endpoint` | `""` | empty: the session's own model (`$.model.complete`). Otherwise the full URL of an OpenAI-compatible `chat/completions` or Anthropic-compatible `messages` endpoint |
-| `apiFormat` | `openai` | `openai` or `anthropic` (adds `anthropic-version: 2023-06-01`, key as `x-api-key`) |
+| `endpoint` | `""` | empty: the session's own model (`$.model.complete`). Otherwise the provider's **base URL**, e.g. `https://opencode.ai/inference/go/v1`. Any path pasted after the base (`/chat/completions`, `/messages`, ...) is stripped; `apiFormat` adds the path |
+| `apiFormat` | `openai` | `openai` (`<base>/chat/completions`) or `anthropic` (`<base>/messages`, adds `anthropic-version: 2023-06-01`, key as `x-api-key`). With a provider that offers both, switch this alone |
 | `apiKeyEnv` | `""` | NAME of the environment variable holding the endpoint key, read by curl (sent as `Authorization: Bearer`, or `x-api-key` for `anthropic`). Empty: no auth header, e.g. where a proxy injects it |
 | `curlPath` | `curl` | curl 8.3+ for endpoint calls, run directly (no shell); set a full path where PATH has an older curl |
-| `extraHeaders` | `""` | JSON object of non-secret headers. `{sessionId}` in a value becomes the Claude Code session id, e.g. `{"x-trace":"cc-{sessionId}"}`. For an opencode.ai endpoint, `x-opencode-session` is added automatically (see below) |
+| `extraHeaders` | `""` | JSON object of non-secret headers. In a value, `{requestId}` becomes a fresh UUID per compaction (the same for all of its refine calls) and `{sessionId}` the Claude Code session id. For an opencode.ai endpoint, `x-opencode-session` is added automatically (see below) |
 | `extraBody` | `""` | JSON object merged into the request body, e.g. `{"reasoning_effort":"low"}` |
 | `timeoutSeconds` | `480` | whole endpoint call, 30-590 |
 | `stream` | `true` | server-sent events (OpenCode Go cuts non-streamed calls at 300 s) |
 | `keepMessages` | `6` | at most this many newest messages kept verbatim (the cut moves forward to the next clean point, see below) |
 | `maxSummaryTokens` | `8000` | summarizer reply cap |
+| `maxSummarizerInputTokens` | `256000` | most tokens per summarizer request (estimated at 4 characters per token). A longer transcript is summarized in parts with refine (see below). Match it to the summarizer's context window |
 | `extraInstructions` | `""` | appended to the summarizer prompt every time |
+| `systemPromptFile` | `""` | the summarizer's system prompt, from a file (`~/` = home, relative = project root). See [Prompt files](#prompt-files) |
+| `steerPromptFile` | `""` | the instructions `steer` mode gives the built-in compaction, from a file |
 | `tailMode` | `text` | `text`: the kept tail is rebuilt as plain text, tool calls as one-line `[tool ...]` notes (survives resume). `verbatim`: the engine's own messages (a kept tool result breaks resume, see below) |
 | `autoTrigger` | `replace` | `replace`: also replace Claude Code's own mid-turn `auto` compactions (live-tested, 0.4.1+). `core`: leave them to core |
 | `applyToSubagents` | `false` | also replace subagent/fork compactions (`agentId` set) |
@@ -119,7 +122,7 @@ Set these in `/config`, or in settings.json under
     "custom-compaction@rjstone": {
       "options": {
         "mode": "replace",
-        "endpoint": "https://opencode.ai/inference/go/v1/chat/completions",
+        "endpoint": "https://opencode.ai/inference/go/v1",
         "apiFormat": "openai",
         "model": "deepseek-v4.1-flash",
         "apiKeyEnv": "OPENCODE_API_KEY",
@@ -132,9 +135,12 @@ Set these in `/config`, or in settings.json under
 
 Go **requires** the `x-opencode-session` header (without it the call fails with `MissingSessionID`). OpenCode's docs:
 "Send a stable session ID in x-opencode-session for each conversation so we can optimize routing and prompt
-caching." Since 0.5.1 the mod sends it automatically for an opencode.ai endpoint, set to the Claude Code session id
-(stable for the conversation, unique across conversations). To set your own, put `x-opencode-session` in
-`extraHeaders` (`{sessionId}` works there). Go also accepts the Anthropic format at `.../inference/go/v1/messages` (`"apiFormat": "anthropic"`).
+caching." A compaction request is a one-shot with nothing to share a cached prefix with, so since 0.7.0 the mod
+treats each compaction as its own conversation: for an opencode.ai endpoint it sends a fresh random UUID
+(`crypto.randomUUID()`), the same for all of that compaction's refine calls and shared with nothing else, so no
+stable Claude Code id goes to the provider. (0.5.1 and 0.6.0 sent the Claude Code session id.) To set your own,
+put `x-opencode-session` in `extraHeaders` (`{requestId}` and `{sessionId}` work there). Go also accepts the
+Anthropic format on the same base URL (`"apiFormat": "anthropic"` gives `.../inference/go/v1/messages`).
 In a Claude Code cloud sandbox whose proxy injects the key, `apiKeyEnv` can name a variable holding a placeholder
 (tested: `OPENCODE_API_KEY=inserted-by-proxy`; the proxy rewrites the `Authorization` header). Why this choice of
 summarizer: in an earlier private comparison on one real session span, DeepSeek's summary scored 16/30
@@ -166,6 +172,20 @@ under `bash -c` with two temp files under `/tmp`, so it needed bash and didn't w
 Text typed after `/compact` reaches the summarizer as extra instructions in
 both `replace` and `steer` mode.
 
+## Prompt files
+
+The summarizer's system prompt and `steer` mode's instructions can come from files. For each, the
+first one found wins:
+
+1. the option's path, `systemPromptFile` / `steerPromptFile` (`~/` = home, a relative path = the
+   project root);
+2. `<project>/.claude/custom-compaction/system.md` / `steer.md` (can be committed with the project);
+3. `~/.claude/custom-compaction/system.md` / `steer.md` (for every project);
+4. the built-in prompt (in `hooks/register.ts`, `SYSTEM` and `STEER`).
+
+An empty file is skipped. The compaction log line names the file used. `.claude/custom-compaction/`
+is also where `saveSummaries` writes. The built-in system prompt is a good starting point to copy.
+
 ## How replace mode works
 
 1. **Pick the tail.** Start at `len - keepMessages` and move *forward* to the
@@ -176,10 +196,15 @@ both `replace` and `steer` mode.
    summarized. (0.2.0 and earlier only cut at the user's prompts; a busy last
    turn then kept far more than `keepMessages`, 13 instead of 6 in the first
    live test.)
-2. **Render the head** as plain text. Each tool call shows its name and input
-   (cut to 400 characters) and its result text (cut to 1,500). If the total
-   passes about 400k characters (roughly 100k tokens), the oldest messages after
-   the first are dropped and replaced with an "N messages omitted" marker.
+2. **Render the head** as plain text, one block per message. Each tool call shows
+   its name and input (cut to 400 characters) and its result text (cut to 1,500).
+   Nothing is dropped: if the rendered head doesn't fit one request
+   (`maxSummarizerInputTokens` x 4 characters, less the system prompt, the summary
+   so far and the prompt's own text), it is split into parts in order and
+   summarized with **refine**: part 1 is summarized alone, then each next request
+   gets the summary so far plus the next part and returns the updated summary
+   (`summary_k = summarize(summary_{k-1} + part_k)`). A single block too big for a
+   part is cut to fit.
 3. **Summarize** with `$.model.complete` (the session's own API client, counted
    in `/cost`) or the external `endpoint`, using a fixed section template: Goal, Standing instructions,
    Decisions and findings, Work done, Current state, Next steps, Open
@@ -203,9 +228,9 @@ both `replace` and `steer` mode.
   putting the summary in the assistant's voice.
 - **One transient endpoint failure** fell back to core as designed. A single
   retry before falling back might be worth it for a slow summarizer.
-- **Rough trimming.** The summarizer budget is a character count, and trimming
-  just drops the oldest messages. A better version would summarize in chunks
-  (map-reduce), or fold in the previous summary step by step.
+- **Budgets are estimates.** Token counts are characters / 4; a summarizer with a
+  much smaller window than `maxSummarizerInputTokens` will reject the request (and
+  the mod falls back to core).
 - **Compacting earlier than Claude Code's threshold** needs a separate trigger
   plugin calling `$.session.compact()` at turn end (Claude Code skips a plugin's
   own `session.compact` hook for a compaction it started). That call only works

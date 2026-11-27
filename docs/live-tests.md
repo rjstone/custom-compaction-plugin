@@ -129,3 +129,20 @@ set and unset (both HTTP 200 through the sandbox proxy), then live: 2 note quest
 (no bash), curl exited 0 in 8.2 s, DeepSeek summarized, `core never ran`; the next resumed turn ran
 at 56.4k tokens and answered the recall question correctly; no back-links. Not yet tried on Windows.
 
+## Base URL, prompt files, per-compaction id, refine (0.7.0, 2026-11-27)
+
+Three headless Haiku sessions, mod loaded with `--plugin-dir`, DeepSeek V4.1 Flash on OpenCode Go with
+`endpoint: https://opencode.ai/inference/go/v1` (a base URL) in every run:
+
+| Run | Settings | Result |
+| --- | --- | --- |
+| A | `apiFormat: openai`, a project `.claude/custom-compaction/system.md` asking for a marker line | called `.../v1/chat/completions`; the saved summary starts with the marker; log names the prompt file |
+| B | `apiFormat: anthropic`, same base URL | called `.../v1/messages`; summary written (exposed a parser gap, below) |
+| C | 5 full-note reads, `maxSummarizerInputTokens: 2000` | 17 messages summarized with **refine over 2 parts** (two curl calls, 12.6 s and 13.7 s, 5.1k in / 3.5k out tokens); the recall turn listed all five notes in order |
+
+Every run: `core never ran`, the next resumed turn at about 56-59k tokens, no back-links. Run B logged
+"0 in" tokens: OpenCode Go's Anthropic-format stream sends `input_tokens: 0` in `message_start` and the real
+count in `message_delta`; the parser now takes the larger of the two. The per-compaction
+`x-opencode-session` value isn't visible in the debug log; a unit test checks that one fresh UUID is sent on
+every call of a refine sequence and that it isn't the session id.
+

@@ -1,6 +1,6 @@
 {
   "name": "custom-compaction",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Replaces Claude Code's built-in compaction with a custom summarizer prompt and transcript layout; the summarizer can be any OpenAI- or Anthropic-compatible endpoint.",
   "author": {
     "name": "rjstone"
@@ -36,7 +36,7 @@
     "endpoint": {
       "type": "string",
       "title": "Summarizer endpoint URL",
-      "description": "Empty: use the session's own model ($.model.complete). Otherwise the full URL of an OpenAI-compatible chat/completions or Anthropic-compatible messages endpoint, e.g. https://opencode.ai/inference/go/v1/chat/completions.",
+      "description": "Base URL of an external summarizer, e.g. https://opencode.ai/inference/go/v1 (empty: the session's own model). Any path after the base is stripped; apiFormat adds /chat/completions or /messages.",
       "default": ""
     },
     "apiFormat": {
@@ -107,10 +107,28 @@
       "description": "maxTokens for the summarizer reply.",
       "default": 8000
     },
+    "maxSummarizerInputTokens": {
+      "type": "number",
+      "title": "Summarizer input budget (tokens)",
+      "description": "Most tokens sent in one summarizer request (estimated at 4 chars per token). A longer transcript is summarized in parts with refine: each call gets the summary so far plus the next part.",
+      "default": 256000
+    },
     "extraInstructions": {
       "type": "string",
       "title": "Extra instructions",
       "description": "Appended to the summarizer prompt on every compaction.",
+      "default": ""
+    },
+    "systemPromptFile": {
+      "type": "string",
+      "title": "System prompt file",
+      "description": "Path to the summarizer's system prompt (~/ = home, relative = project root). Empty: <project>/.claude/custom-compaction/system.md, then ~/.claude/custom-compaction/system.md, then the built-in.",
+      "default": ""
+    },
+    "steerPromptFile": {
+      "type": "string",
+      "title": "Steer prompt file",
+      "description": "Path to the instructions steer mode gives the built-in compaction. Empty: <project>/.claude/custom-compaction/steer.md, then ~/.claude/custom-compaction/steer.md, then the built-in.",
       "default": ""
     },
     "applyToSubagents": {

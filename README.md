@@ -30,7 +30,7 @@ current project):
 
 ```sh
 claude plugin install custom-compaction --marketplace rjstone/plugin-marketplace \
-  --config endpoint=https://opencode.ai/inference/go/v1/chat/completions --config apiFormat=openai \
+  --config endpoint=https://opencode.ai/inference/go/v1 --config apiFormat=openai \
   --config model=deepseek-v4.1-flash --config apiKeyEnv=OPENCODE_API_KEY
 ```
 
@@ -51,7 +51,7 @@ it for you):
   "pluginConfigs": {
     "custom-compaction@rjstone": {
       "options": {
-        "endpoint": "https://opencode.ai/inference/go/v1/chat/completions",
+        "endpoint": "https://opencode.ai/inference/go/v1",
         "apiFormat": "openai",
         "model": "deepseek-v4.1-flash",
         "apiKeyEnv": "OPENCODE_API_KEY"
@@ -61,8 +61,11 @@ it for you):
 }
 ```
 
-For an opencode.ai endpoint the mod sends OpenCode's `x-opencode-session` header itself, set to the
-Claude Code session id (OpenCode asks for a stable id per conversation, for routing and prompt caching).
+`endpoint` is the provider's base URL; `apiFormat` (`openai` or `anthropic`) adds the path. For an
+opencode.ai endpoint the mod sends OpenCode's `x-opencode-session` header itself, a fresh id per
+compaction. The summarizer's prompts can come from files in `.claude/custom-compaction/` (project or
+home), and transcripts too long for one request are summarized in parts (refine). Details: the
+[plugin README](claude-code/custom-compaction/README.md).
 
 ## Docs
 

@@ -37,10 +37,13 @@ type Settings = {
   autoTrigger: 'core' | 'replace'
   tailMode: 'text' | 'verbatim'
   saveSummaries: boolean
+  systemPromptFile: string
+  steerPromptFile: string
+  maxSummarizerInputTokens: number
 }
 
-// Roughly 100k tokens of transcript text sent to the summarizer at most.
-const MAX_TRANSCRIPT_CHARS = 400_000
+// Characters per token for budgets (a rough average for English and code).
+const CHARS_PER_TOKEN = 4
 const MAX_TOOL_INPUT_CHARS = 400
 const MAX_TOOL_RESULT_CHARS = 1_500
 
@@ -99,6 +102,9 @@ function settingsFrom(options: Record<string, unknown>): Settings {
     autoTrigger: options.autoTrigger === 'core' ? 'core' : 'replace',
     tailMode: options.tailMode === 'verbatim' ? 'verbatim' : 'text',
     saveSummaries: options.saveSummaries === true,
+    systemPromptFile: typeof options.systemPromptFile === 'string' ? options.systemPromptFile.trim() : '',
+    steerPromptFile: typeof options.steerPromptFile === 'string' ? options.steerPromptFile.trim() : '',
+    maxSummarizerInputTokens: clampInt(options.maxSummarizerInputTokens, 2_000, 4_000_000, 256_000),
   }
 }
 
@@ -129,9 +135,26 @@ function jsonObject(v: unknown): Record<string, unknown> {
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
 export const STATUS_MARK = '\n__CUSTOM_COMPACTION_HTTP__:'
 
+/**
+ * `endpoint` is a base URL; `apiFormat` decides the path. Whatever path a user
+ * pasted after the base (`/chat/completions`, `/messages`, `/completions`,
+ * `/responses`, trailing slashes) is stripped first, so the format always wins:
+ * `https://opencode.ai/inference/go/v1` and `.../v1/chat/completions` both give
+ * `.../v1/messages` for `anthropic`.
+ */
+export function endpointUrl(endpoint: string, apiFormat: ApiFormat): string {
+  let base = endpoint.trim().replace(/[?#].*$/, '')
+  for (;;) {
+    const next = base.replace(/\/+$/, '').replace(/\/(?:chat\/completions|completions|messages|responses)$/i, '')
+    if (next === base) break
+    base = next
+  }
+  return base + (apiFormat === 'anthropic' ? '/messages' : '/chat/completions')
+}
+
 /** curl's argument vector for one request (argv[0] is the curl executable). */
 export function curlArgs(s: Settings, headers: Record<string, string>): string[] {
-  const argv = [s.curlPath, '-sS', '-N', '--max-time', String(s.timeoutSeconds), '-X', 'POST', s.endpoint,
+  const argv = [s.curlPath, '-sS', '-N', '--max-time', String(s.timeoutSeconds), '-X', 'POST', endpointUrl(s.endpoint, s.apiFormat),
     '-H', 'Content-Type: application/json']
   for (const [k, v] of Object.entries(headers)) argv.push('-H', `${k}: ${v}`)
   if (s.apiKeyEnv) {
@@ -175,8 +198,11 @@ export function parseReply(raw: string, fmt: ApiFormat): External {
       if (j.usage) { inTokens = j.usage.prompt_tokens ?? inTokens; outTokens = j.usage.completion_tokens ?? outTokens }
     } else {
       if (j.type === 'content_block_delta' && j.delta?.type === 'text_delta') text += j.delta.text ?? ''
-      if (j.type === 'message_start') inTokens = j.message?.usage?.input_tokens ?? inTokens
-      if (j.type === 'message_delta') outTokens = j.usage?.output_tokens ?? outTokens
+      // Input tokens: Anthropic reports them in message_start; some gateways (OpenCode Go) send 0
+      // there and the real count in message_delta. Take the larger, counting cache reads/writes.
+      const inOf = (u: any) => (u?.input_tokens ?? 0) + (u?.cache_read_input_tokens ?? 0) + (u?.cache_creation_input_tokens ?? 0)
+      if (j.type === 'message_start') inTokens = Math.max(inTokens, inOf(j.message?.usage))
+      if (j.type === 'message_delta') { outTokens = j.usage?.output_tokens ?? outTokens; inTokens = Math.max(inTokens, inOf(j.usage)) }
       if (j.type === 'message' && Array.isArray(j.content)) {
         text += j.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('')
         inTokens = j.usage?.input_tokens ?? inTokens; outTokens = j.usage?.output_tokens ?? outTokens
@@ -195,38 +221,42 @@ export function parseReply(raw: string, fmt: ApiFormat): External {
   return text.trim() ? { ok: true, text, inTokens, outTokens } : { ok: false, why: 'empty reply from endpoint' }
 }
 
+/** Ids a header value can use: `{sessionId}`, and `{requestId}` (fresh per compaction). */
+export type HeaderIds = { sessionId: string; requestId: string }
+
 /**
  * The non-secret request headers: the format's own, then `extraHeaders` with
- * `{sessionId}` in a value replaced by the Claude Code session id. OpenCode Go
- * wants "a stable session ID in x-opencode-session for each conversation"
- * (routing and prompt caching), so for an opencode.ai endpoint the mod adds
- * that header itself when `extraHeaders` doesn't set it. Header lines with a
- * CR or LF are dropped.
+ * `{sessionId}` / `{requestId}` in a value replaced. OpenCode Go wants "a stable
+ * session ID in x-opencode-session for each conversation" (routing and prompt
+ * caching). A compaction is its own conversation: one fresh id for all of its
+ * calls (several with refine), shared with nothing else, so no stable Claude
+ * Code id goes to the provider. For an opencode.ai endpoint the mod adds that
+ * header itself unless `extraHeaders` sets it. Lines with CR or LF are dropped.
  */
 export function resolveHeaders(
   apiFormat: string,
   endpoint: string,
   extraHeaders: Record<string, string>,
-  sessionId: string,
+  ids: HeaderIds,
 ): Record<string, string> {
   const headers: Record<string, string> = apiFormat === 'anthropic' ? { 'anthropic-version': '2023-06-01' } : {}
   for (const [k, v] of Object.entries(extraHeaders)) {
     if (typeof v !== 'string') continue
-    const value = v.split('{sessionId}').join(sessionId)
+    const value = v.split('{sessionId}').join(ids.sessionId).split('{requestId}').join(ids.requestId)
     if (!/[\r\n]/.test(k + value)) headers[k] = value
   }
   let host = ''
   try { host = new URL(endpoint).hostname } catch { /* not a URL: no automatic header */ }
   const hasSession = Object.keys(headers).some(k => k.toLowerCase() === 'x-opencode-session')
-  if (!hasSession && (host === 'opencode.ai' || host.endsWith('.opencode.ai')) && sessionId && !/[\r\n]/.test(sessionId)) {
-    headers['x-opencode-session'] = sessionId
+  if (!hasSession && (host === 'opencode.ai' || host.endsWith('.opencode.ai')) && ids.requestId && !/[\r\n]/.test(ids.requestId)) {
+    headers['x-opencode-session'] = ids.requestId
   }
   return headers
 }
 
-async function callExternal($: any, s: Settings, system: string, prompt: string): Promise<External> {
+async function callExternal($: any, s: Settings, system: string, prompt: string, requestId: string): Promise<External> {
   if (s.apiKeyEnv && !ENV_NAME.test(s.apiKeyEnv)) return { ok: false, why: `apiKeyEnv "${s.apiKeyEnv}" is not a variable name` }
-  const headers = resolveHeaders(s.apiFormat, s.endpoint, s.extraHeaders, await $.session.id())
+  const headers = resolveHeaders(s.apiFormat, s.endpoint, s.extraHeaders, { sessionId: await $.session.id(), requestId })
   let r: { exitCode: number; stdout?: string; stderr?: string }
   try {
     r = await $.process.run(curlArgs(s, headers), {
@@ -277,8 +307,9 @@ export function tailStart(messages: readonly SessionMessage[], keep: number): nu
 }
 
 /** The transcript as plain text for the summarizer, within a size budget. */
-export function renderTranscript(messages: readonly SessionMessage[], budget = MAX_TRANSCRIPT_CHARS): string {
-  const blocks = messages.map((m, i) => {
+/** One text block per message: role, text, tool calls with cut inputs and results. */
+export function renderBlocks(messages: readonly SessionMessage[]): string[] {
+  return messages.map((m, i) => {
     const lines = [`### [${i}] ${m.role.toUpperCase()}`]
     if (m.text) lines.push(m.text)
     for (const u of m.toolUses) {
@@ -289,28 +320,91 @@ export function renderTranscript(messages: readonly SessionMessage[], budget = M
     // already carry each call's outcome text.
     return lines.join('\n')
   })
-  // Over budget: keep the first block (the original ask) and drop the oldest
-  // blocks after it until the rest fits.
-  let total = blocks.reduce((a, b) => a + b.length + 2, 0)
-  let omitted = 0
-  while (total > budget && blocks.length > 2) {
-    total -= (blocks[1] ?? '').length + 2
-    blocks.splice(1, 1)
-    omitted++
-  }
-  if (omitted > 0) blocks.splice(1, 0, `[... ${omitted} earlier messages omitted to fit the summarizer ...]`)
-  return blocks.join('\n\n')
 }
 
-export function buildPrompt(transcript: string, s: Settings, e: SessionCompactInput): string {
+/** The whole transcript as one text (no budget). */
+export function renderTranscript(messages: readonly SessionMessage[]): string {
+  return renderBlocks(messages).join('\n\n')
+}
+
+/**
+ * Groups blocks into chunks of at most `maxChars` (in order, nothing dropped).
+ * A single block longer than `maxChars` is cut to fit, with a marker.
+ */
+export function chunkBlocks(blocks: readonly string[], maxChars: number): string[] {
+  const chunks: string[] = []
+  let cur = ''
+  for (const raw of blocks) {
+    const b = raw.length > maxChars ? cut(raw, Math.max(0, maxChars - 40)) : raw
+    if (cur && cur.length + 2 + b.length > maxChars) { chunks.push(cur); cur = '' }
+    cur = cur ? `${cur}\n\n${b}` : b
+  }
+  if (cur) chunks.push(cur)
+  return chunks
+}
+
+export type Part = { index: number; total: number; previous?: string }
+
+/**
+ * The summarizer's user prompt. With refine (several chunks), part k > 1 gets
+ * the summary so far and asks for it updated with the next part:
+ * summary_k = summarize(summary_{k-1} + chunk_k).
+ */
+export function buildPrompt(transcript: string, s: Settings, e: SessionCompactInput, part: Part = { index: 1, total: 1 }): string {
   const extra = [s.extraInstructions, e.instructions].filter(x => x && x.trim()).join('\n\n')
+  const many = part.total > 1
   return [
-    '<transcript>',
+    part.previous ? `<summary-so-far>\n${part.previous.trim()}\n</summary-so-far>\n` : '',
+    many ? `<transcript part="${part.index}" of="${part.total}">` : '<transcript>',
     transcript,
     '</transcript>',
     extra ? `\nAdditional instructions for this summary:\n${extra}` : '',
-    '\nWrite the summary now.',
+    part.previous
+      ? `\nThis is part ${part.index} of ${part.total} of the transcript; the summary so far covers the parts before it. ` +
+        'Write the updated summary: merge in what this part adds or changes, keep everything from the summary so far ' +
+        'that still holds, and use the same sections.'
+      : many
+        ? `\nThis is part 1 of ${part.total} of the transcript; later parts follow in later requests. Write the summary of this part.`
+        : '\nWrite the summary now.',
   ].join('\n')
+}
+
+/**
+ * A prompt file's text, else the built-in. Looked up in order, first found wins:
+ * the option's path (`~/` = home, relative = the project root), then
+ * `<project>/.claude/custom-compaction/<name>`, then `~/.claude/custom-compaction/<name>`.
+ */
+async function loadPrompt($: any, optionPath: string, name: string, builtin: string): Promise<{ text: string; from: string }> {
+  const home = ((await $.env.get('HOME')) || (await $.env.get('USERPROFILE')) || '').replace(/[\\/]+$/, '')
+  let root = ''
+  try { root = String(await $.session.root()).replace(/[\\/]+$/, '') } catch { /* no project root */ }
+  const abs = (p: string) => (p.startsWith('~/') && home ? `${home}/${p.slice(2)}` : /^([A-Za-z]:[\\/]|[\\/])/.test(p) || !root ? p : `${root}/${p}`)
+  const candidates = [
+    ...(optionPath ? [abs(optionPath)] : []),
+    ...(root ? [`${root}/.claude/custom-compaction/${name}`] : []),
+    ...(home ? [`${home}/.claude/custom-compaction/${name}`] : []),
+  ]
+  for (const path of candidates) {
+    try {
+      if (await $.fs.exists(path)) {
+        const text = String(await $.fs.read(path))
+        if (text.trim()) return { text, from: path }
+      }
+    } catch { /* unreadable: try the next */ }
+  }
+  return { text: builtin, from: 'built-in' }
+}
+
+type Summary = { ok: true; text: string; inTokens: number; outTokens: number } | { ok: false; why: string }
+
+/** One summarizer call: the external endpoint, else the session's own model. */
+async function summarize($: any, s: Settings, system: string, prompt: string, requestId: string): Promise<Summary> {
+  if (s.endpoint) return callExternal($, s, system, prompt, requestId)
+  const r = await $.model.complete({ model: s.model, system, prompt, maxTokens: s.maxSummaryTokens, timeoutMs: 5 * 60_000 })
+  if (!r.isAnswered || !r.text.trim()) {
+    return { ok: false, why: r.isAnswered ? 'empty reply' : r.reason === 'api-error' ? `api-error ${r.status ?? ''} ${r.error}` : r.reason }
+  }
+  return { ok: true, text: r.text, inTokens: r.usage.input_tokens, outTokens: r.usage.output_tokens }
 }
 
 /**
@@ -388,7 +482,8 @@ export const register: Register = (on, options) => {
     if (e.agentId !== undefined && !s.applyToSubagents) return next(e)
 
     if (s.mode === 'steer') {
-      const instructions = [STEER, s.extraInstructions, e.instructions].filter(x => x && x.trim()).join('\n\n')
+      const steer = await loadPrompt($, s.steerPromptFile, 'steer.md', STEER)
+      const instructions = [steer.text, s.extraInstructions, e.instructions].filter(x => x && x.trim()).join('\n\n')
       return next({ ...e, instructions })
     }
 
@@ -411,34 +506,33 @@ export const register: Register = (on, options) => {
     const tail = s.tailMode === 'verbatim' ? e.messages.slice(start) : textTail(e.messages.slice(start))
     if (head.length === 0) return next(e)
 
-    const transcript = renderTranscript(head)
-    const prompt = buildPrompt(transcript, s, e)
-    let summary: string
-    let tokens: string
-    if (s.endpoint) {
-      const x = await callExternal($, s, SYSTEM, prompt)
-      if (!x.ok) {
-        $.ui.toast(`custom-compaction: endpoint summarizer failed (${x.why}); using built-in compaction`)
-        return next(e)
-      }
-      summary = x.text
-      tokens = `${x.inTokens} in / ${x.outTokens} out tokens via ${s.endpoint}`
-    } else {
-      const r = await $.model.complete({
-        model: s.model,
-        system: SYSTEM,
-        prompt,
-        maxTokens: s.maxSummaryTokens,
-        timeoutMs: 5 * 60_000,
-      })
-      if (!r.isAnswered || !r.text.trim()) {
-        const why = r.isAnswered ? 'empty reply' : r.reason === 'api-error' ? `api-error ${r.status ?? ''} ${r.error}` : r.reason
-        $.ui.toast(`custom-compaction: summarizer failed (${why}); using built-in compaction`)
+    const system = await loadPrompt($, s.systemPromptFile, 'system.md', SYSTEM)
+    // Budget for one request: the transcript part, plus the system prompt, the
+    // summary so far (at most maxSummaryTokens) and the prompt's own text.
+    const budget = s.maxSummarizerInputTokens * CHARS_PER_TOKEN
+    const chunkChars = Math.max(8_000, budget - system.text.length - s.maxSummaryTokens * CHARS_PER_TOKEN - 4_000)
+    const chunks = chunkBlocks(renderBlocks(head), chunkChars)
+    // One id for the whole compaction (all refine calls), shared with nothing else.
+    const requestId = crypto.randomUUID()
+    let summary = ''
+    let inTokens = 0
+    let outTokens = 0
+    for (let k = 0; k < chunks.length; k++) {
+      const part: Part = { index: k + 1, total: chunks.length, ...(summary ? { previous: summary } : {}) }
+      const r = await summarize($, s, system.text, buildPrompt(chunks[k] ?? '', s, e, part), requestId)
+      if (!r.ok) {
+        const where = chunks.length > 1 ? ` on part ${k + 1} of ${chunks.length}` : ''
+        $.ui.toast(`custom-compaction: summarizer failed${where} (${r.why}); using built-in compaction`)
         return next(e)
       }
       summary = r.text
-      tokens = `${r.usage.input_tokens} in / ${r.usage.output_tokens} out tokens`
+      inTokens += r.inTokens
+      outTokens += r.outTokens
     }
+    const via = s.endpoint ? ` via ${endpointUrl(s.endpoint, s.apiFormat)}` : ''
+    const tokens = `${inTokens} in / ${outTokens} out tokens${via}` +
+      (chunks.length > 1 ? `, refine over ${chunks.length} parts` : '') +
+      (system.from !== 'built-in' ? `, system prompt from ${system.from}` : '')
 
     if (s.saveSummaries) {
       const sid = await $.session.id()

@@ -5,7 +5,7 @@
 
 import type { SessionMessage } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
-import { resolveHeaders } from '../hooks/register'
+import { chunkBlocks, endpointUrl, resolveHeaders } from '../hooks/register'
 import type { TestBody } from 'claude-code/testing'
 
 const u = (text: string): SessionMessage => ({ role: 'user', text, toolUses: [] })
@@ -36,7 +36,16 @@ const BUILTIN = { messages: [u('BUILT-IN SUMMARY')] }
 // answers { value }, what that call resolves to. `reply` is the summarizer's
 // answer; `seen` collects the prompt it was sent.
 type On = Parameters<TestBody>[1]
+// Stand-ins for the prompt-file lookup: no HOME, project root /proj, and the
+// files given (path -> text).
+function promptStubs(on: On, files: Record<string, string> = {}) {
+  on('env.get', () => ({ value: undefined }) as never)
+  on('session.root', () => ({ value: '/proj' }) as never)
+  on('fs.exists', (_, e: any) => ({ value: Object.hasOwn(files, String(e.path ?? e[0])) }) as never)
+  on('fs.read', (_, e: any) => ({ value: files[String(e.path ?? e[0])] ?? '' }) as never)
+}
 function stubs(on: On, reply: unknown, seen?: { prompt: string; called: boolean }) {
+  promptStubs(on)
   on('model.complete', (_, e) => {
     if (seen) { seen.called = true; seen.prompt = e.prompt }
     return { value: reply } as never
@@ -115,6 +124,7 @@ test('subagent compactions pass through by default', async ($, on) => {
 })
 
 test('steer mode adds instructions to the built-in compaction', { options: { mode: 'steer', extraInstructions: 'EXTRA' } }, async ($, on) => {
+  promptStubs(on)
   let got = ''
   on('session.compact', (_, e) => { got = e.instructions ?? ''; return BUILTIN })
   await $.session.compact({ trigger: 'manual', messages: TRANSCRIPT, instructions: 'USER ARGS' })
@@ -151,6 +161,7 @@ function endpointStubs(on: On, stdout: string, seen: { files: Record<string, str
   on('ui.toast', () => ({ value: undefined }) as never)
   on('ui.log', () => ({ value: undefined }) as never)
   on('session.id', () => ({ value: 'sess-123' }) as never)
+  promptStubs(on)
 }
 
 test('endpoint: summary comes from the external call, not $.model.complete', { options: EP }, async ($, on) => {
@@ -192,6 +203,7 @@ test('endpoint: an old curl (no --variable) falls back with a clear reason', { o
   on('ui.toast', (_, e: any) => { toasts.push(String(e.text ?? e[0])); return { value: undefined } as never })
   on('ui.log', () => ({ value: undefined }) as never)
   on('session.id', () => ({ value: 'sess-123' }) as never)
+  promptStubs(on)
   on('session.compact', () => BUILTIN)
   const r = await $.session.compact({ trigger: 'plugin', messages: TRANSCRIPT })
   expect(r.messages?.[0]?.text).toBe('BUILT-IN SUMMARY')
@@ -280,11 +292,89 @@ test('text tail mid tool round (auto, autoTrigger replace): ends on a user conti
   for (let k = 1; k < msgs.length; k++) expect(msgs[k]?.role).not.toBe(msgs[k - 1]?.role)
 })
 
-test('resolveHeaders: {sessionId} placeholder, automatic x-opencode-session for opencode.ai only', async () => {
-  const go = 'https://opencode.ai/inference/go/v1/chat/completions'
-  expect(resolveHeaders('openai', go, { 'x-opencode-session': 'cc-{sessionId}' }, 'S1')).toEqual({ 'x-opencode-session': 'cc-S1' })
-  expect(resolveHeaders('openai', go, {}, 'S1')).toEqual({ 'x-opencode-session': 'S1' })
-  expect(resolveHeaders('openai', go, { 'X-OpenCode-Session': 'fixed' }, 'S1')).toEqual({ 'X-OpenCode-Session': 'fixed' })
-  expect(resolveHeaders('anthropic', 'https://api.example.com/v1/messages', {}, 'S1')).toEqual({ 'anthropic-version': '2023-06-01' })
-  expect(resolveHeaders('openai', 'https://openrouter.ai/api/v1/chat/completions', { a: 'x\ny' }, 'S1')).toEqual({})
+test('resolveHeaders: placeholders; automatic x-opencode-session (the request id) for opencode.ai only', async () => {
+  const go = 'https://opencode.ai/inference/go/v1'
+  const ids = { sessionId: 'S1', requestId: 'R1' }
+  expect(resolveHeaders('openai', go, { 'x-opencode-session': 'cc-{sessionId}-{requestId}' }, ids)).toEqual({ 'x-opencode-session': 'cc-S1-R1' })
+  expect(resolveHeaders('openai', go, {}, ids)).toEqual({ 'x-opencode-session': 'R1' })
+  expect(resolveHeaders('openai', go, { 'X-OpenCode-Session': 'fixed' }, ids)).toEqual({ 'X-OpenCode-Session': 'fixed' })
+  expect(resolveHeaders('anthropic', 'https://api.example.com/v1', {}, ids)).toEqual({ 'anthropic-version': '2023-06-01' })
+  expect(resolveHeaders('openai', 'https://openrouter.ai/api/v1', { a: 'x\ny' }, ids)).toEqual({})
+})
+
+test('endpointUrl: base URL normalized, apiFormat picks the path', async () => {
+  const go = 'https://opencode.ai/inference/go/v1'
+  expect(endpointUrl(go, 'openai')).toBe(go + '/chat/completions')
+  expect(endpointUrl(go + '/', 'anthropic')).toBe(go + '/messages')
+  expect(endpointUrl(go + '/chat/completions', 'anthropic')).toBe(go + '/messages')   // pasted full URL: format wins
+  expect(endpointUrl(go + '/messages/', 'openai')).toBe(go + '/chat/completions')
+  expect(endpointUrl('https://api.anthropic.com/v1/messages?beta=1', 'anthropic')).toBe('https://api.anthropic.com/v1/messages')
+  expect(endpointUrl('https://api.openai.com/v1/responses', 'openai')).toBe('https://api.openai.com/v1/chat/completions')
+})
+
+test('chunkBlocks: in order, nothing dropped, long blocks cut', async () => {
+  expect(chunkBlocks(['aaaa', 'bbbb', 'cccc'], 10)).toEqual(['aaaa\n\nbbbb', 'cccc'])
+  const [one] = chunkBlocks(['x'.repeat(100)], 60)
+  expect((one ?? '').length).toBeLessThanOrEqual(60 + 30)
+})
+
+const LONG: SessionMessage[] = [
+  u('Start: ' + 'a'.repeat(5000)), a('Reply one ' + 'b'.repeat(5000)),
+  u('Middle: ' + 'c'.repeat(5000)), a('Reply two ' + 'd'.repeat(5000)),
+  u('Last ask'), a('Last reply'),
+]
+
+test('refine: a transcript over budget is summarized in parts, each with the summary so far', { options: { maxSummarizerInputTokens: 2000, maxSummaryTokens: 512, keepMessages: 2 } }, async ($, on) => {
+  promptStubs(on)
+  const prompts: string[] = []
+  on('model.complete', (_, e) => { prompts.push(e.prompt); return { value: OK(`SUMMARY-${prompts.length}`) } as never })
+  on('ui.toast', () => ({ value: undefined }) as never)
+  on('ui.log', () => ({ value: undefined }) as never)
+  on('session.compact', () => BUILTIN)
+  const r = await $.session.compact({ trigger: 'manual', messages: LONG })
+  expect(prompts.length).toBeGreaterThan(1)
+  expect(prompts[0]).toContain('part="1"')
+  expect(prompts[0]).not.toContain('<summary-so-far>')
+  expect(prompts[1]).toContain('<summary-so-far>\nSUMMARY-1')
+  expect(prompts[1]).toContain('part="2"')
+  expect(r.messages?.[0]?.text).toContain(`SUMMARY-${prompts.length}`)   // the last refine step's summary
+  expect(prompts.join('')).toContain('Middle:')                          // nothing dropped
+})
+
+test('prompt files: <project>/.claude/custom-compaction/system.md replaces the built-in system prompt', async ($, on) => {
+  promptStubs(on, { '/proj/.claude/custom-compaction/system.md': 'MY SYSTEM PROMPT' })
+  let system = ''
+  on('model.complete', (_, e: any) => { system = String(e.system); return { value: OK('S') } as never })
+  on('ui.toast', () => ({ value: undefined }) as never)
+  on('ui.log', () => ({ value: undefined }) as never)
+  on('session.compact', () => BUILTIN)
+  await $.session.compact({ trigger: 'manual', messages: TRANSCRIPT })
+  expect(system).toBe('MY SYSTEM PROMPT')
+})
+
+test('endpoint refine: one fresh x-opencode-session for every call of a compaction', { options: { ...EP, endpoint: 'https://opencode.ai/inference/go/v1', extraHeaders: '', maxSummarizerInputTokens: 2000, maxSummaryTokens: 512, keepMessages: 2 } }, async ($, on) => {
+  const calls: string[][] = []
+  on('process.run', (_, e: any) => { calls.push(e.argv); return { value: { exitCode: 0, stdout: SSE_OPENAI + STATUS_MARK + '200', stderr: '' } } as never })
+  on('ui.toast', () => ({ value: undefined }) as never)
+  on('ui.log', () => ({ value: undefined }) as never)
+  on('session.id', () => ({ value: 'sess-123' }) as never)
+  promptStubs(on)
+  on('session.compact', () => BUILTIN)
+  await $.session.compact({ trigger: 'manual', messages: LONG })
+  expect(calls.length).toBeGreaterThan(1)
+  const ids = calls.map(argv => argv.find(x => x.startsWith('x-opencode-session: ')) ?? '')
+  expect(new Set(ids).size).toBe(1)
+  expect(ids[0]).toMatch(/^x-opencode-session: [0-9a-f-]{36}$/)
+  expect(ids[0]).not.toContain('sess-123')
+  expect(calls[0]).toContain('https://opencode.ai/inference/go/v1/chat/completions')
+})
+
+test('parseReply anthropic: input tokens from message_delta when message_start says 0 (OpenCode Go)', async () => {
+  const go =
+    'data: {"type":"message_start","message":{"usage":{"input_tokens":0,"output_tokens":0}}}\n\n' +
+    'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"ok"}}\n\n' +
+    'data: {"type":"message_delta","usage":{"input_tokens":35,"output_tokens":3,"cache_read_input_tokens":5}}\n\n'
+  const r = parseReply(go, 'anthropic')
+  expect(r.ok && r.inTokens).toBe(40)
+  expect(r.ok && r.outTokens).toBe(3)
 })

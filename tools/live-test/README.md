@@ -67,5 +67,5 @@ Notes:
 - Hooks modules load behind a server-side rollout flag; a fresh process may log `hooks module
   custom-compaction@inline not loaded` and load it moments later.
 - A plugin's `$.session.compact()` is unavailable headless, which is why the driver sends `/compact`.
-- OpenCode Go requires an `x-opencode-session` header, a stable id per conversation. The mod adds the session id
-  itself (0.5.1+); `gen_questions.py` uses one UUID per run.
+- OpenCode Go requires an `x-opencode-session` header, a stable id per conversation. The mod adds a fresh id per
+  compaction itself (0.7.0+); `gen_questions.py` uses one UUID per run.
