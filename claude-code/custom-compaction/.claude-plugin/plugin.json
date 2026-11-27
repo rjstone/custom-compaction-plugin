@@ -1,6 +1,6 @@
 {
   "name": "custom-compaction",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Replaces Claude Code's built-in compaction with a custom summarizer prompt and transcript layout; the summarizer can be any OpenAI- or Anthropic-compatible endpoint.",
   "author": {
     "name": "rjstone"
