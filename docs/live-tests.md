@@ -82,3 +82,39 @@ carried on normally. Recall: Haiku named the first subject and its main facts
 from the summary, and said it couldn't give the five answers in order
 (see gaps). Result: 0.5.0 makes `autoTrigger: replace` the default, and no
 trigger plugin is needed.
+
+## Coding problems, installed from the marketplace (0.5.0, 2026-11-27)
+
+The first test of the published plugin: `claude plugin install custom-compaction --marketplace
+rjstone/custom-compaction-plugin --scope project` in a test folder (cloned from GitHub, enabled in
+that folder's `.claude/settings.json`), options passed with `--config` (DeepSeek V4.1 Flash on
+OpenCode Go). They were stored in user settings under
+`pluginConfigs["custom-compaction@custom-compaction"]`, and the installed mod read them there. No
+`--plugin-dir`.
+
+Task: 8 Codeforces problems from the CodeElo benchmark, rated 1300-1600, non-interactive, picked
+with a fixed seed, one per turn. Haiku (Read, Write, Edit, Bash) wrote a Python solution per
+problem and fixed it until the sample passed, often adding its own brute-force cross-checks. The
+auto-compact window was 120k, so Claude Code compacted at about 87-89k.
+
+| Turn | Problem | Time | Context after | Compaction |
+| --- | --- | --- | --- | --- |
+| 1 | 1976C (1600) | 124 s | 76.8k | |
+| 2 | 1989C (1400) | 45 s | 85.9k | |
+| 3 | 2004D (1600) | 49 s | 61.8k | `auto` mid-turn: 22 messages -> 3.75k-char summary (3.0k in / 1.8k out), 3 stand |
+| 4 | 2035C (1400) | 73 s | 77.1k | |
+| 5 | 2022B (1300) | 18 s | 81.0k | |
+| 6 | 1974D (1400) | 103 s | 65.4k | `auto` mid-turn: 42 messages -> 5.65k-char summary (7.3k in / 2.1k out), 3 stand |
+| 7 | 1983C (1400) | 34 s | 73.9k | |
+| 8 | 2019C (1600) | 28 s | 80.1k | |
+| 9 | recall | 14 s | 80.6k | |
+
+Both compactions: `core never ran`; chain check clean (no back-links, the walk back reaches a
+boundary in 86 hops); no turn errors. All 8 solutions pass their sample (exact match for six, a
+validity checker for the two that accept any valid answer); the hidden tests weren't available.
+Recall (no file reads): all 8 problems in order with ID, title, key idea and complexity, and an
+honest list of what was only brute-force checked on small inputs. The two compactions didn't
+disturb the work: the problems after each one were solved and tested normally.
+
+The run used 0.5.0's fixed `x-opencode-session` value; 0.5.1 sends the session id instead.
+

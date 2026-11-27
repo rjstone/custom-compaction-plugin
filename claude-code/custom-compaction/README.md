@@ -78,8 +78,9 @@ its first moments without the mod (see [live tests](../../docs/live-tests.md)).
 ## Options (`userConfig`)
 
 Set these in `/config`, or in settings.json under
-`pluginConfigs["custom-compaction"].options` (for a `--plugin-dir` load the
-key may be `custom-compaction@inline`).
+`pluginConfigs["custom-compaction@custom-compaction"].options` for a plugin installed from this
+marketplace (`<plugin>@<marketplace>`; live-tested 2026-11-27), or `custom-compaction@inline`
+for a `--plugin-dir` load. `claude plugin install ... --config key=value` stores them there too.
 
 | Option | Default | Meaning |
 | --- | --- | --- |
@@ -105,7 +106,7 @@ key may be `custom-compaction@inline`).
 ```json
 {
   "pluginConfigs": {
-    "custom-compaction": {
+    "custom-compaction@custom-compaction": {
       "options": {
         "mode": "replace",
         "endpoint": "https://opencode.ai/inference/go/v1/chat/completions",

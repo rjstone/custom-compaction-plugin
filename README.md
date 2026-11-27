@@ -27,12 +27,14 @@ From a shell: `claude plugin install custom-compaction --marketplace rjstone/cus
 Then answer `y` to add the marketplace and pick a scope. Options (summarizer model or endpoint,
 kept messages, prompt additions) are in the [plugin README](claude-code/custom-compaction/README.md).
 
-Example: summarize with DeepSeek V4.1 Flash on OpenCode Go, in `settings.json`:
+Example: summarize with DeepSeek V4.1 Flash on OpenCode Go, in `~/.claude/settings.json` (the key is
+`<plugin>@<marketplace>` for an installed plugin; `/plugin configure custom-compaction@custom-compaction` or
+`claude plugin install ... --config key=value` write it for you):
 
 ```json
 {
   "pluginConfigs": {
-    "custom-compaction": {
+    "custom-compaction@custom-compaction": {
       "options": {
         "endpoint": "https://opencode.ai/inference/go/v1/chat/completions",
         "apiFormat": "openai",
