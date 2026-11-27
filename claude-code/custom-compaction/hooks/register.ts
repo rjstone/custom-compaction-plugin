@@ -140,12 +140,18 @@ export const STATUS_MARK = '\n__CUSTOM_COMPACTION_HTTP__:'
 /**
  * `endpoint` is a base URL; `apiFormat` decides the path. Whatever path a user
  * pasted after the base (`/chat/completions`, `/messages`, `/completions`,
- * `/responses`, trailing slashes) is stripped first, so the format always wins:
+ * `/responses`, trailing slashes) is stripped first, so the format always wins
+ * (a query string is kept and put back after the path):
  * `https://opencode.ai/inference/go/v1` and `.../v1/chat/completions` both give
  * `.../v1/messages` for `anthropic`.
  */
 export function endpointUrl(endpoint: string, apiFormat: ApiFormat): string {
-  let base = endpoint.trim().replace(/[?#].*$/, '')
+  // Keep the query string (Azure's ?api-version=...) and put it back after the
+  // path; drop a #fragment, which has no meaning for an API call.
+  const raw = endpoint.trim().replace(/#.*$/, '')
+  const q = raw.indexOf('?')
+  let base = q >= 0 ? raw.slice(0, q) : raw
+  const query = q >= 0 ? raw.slice(q) : ''
   // No scheme: assume https (curl would guess http and send the key in the clear).
   if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(base)) base = `https://${base}`
   for (;;) {
@@ -153,7 +159,7 @@ export function endpointUrl(endpoint: string, apiFormat: ApiFormat): string {
     if (next === base) break
     base = next
   }
-  return base + (apiFormat === 'anthropic' ? '/messages' : '/chat/completions')
+  return base + (apiFormat === 'anthropic' ? '/messages' : '/chat/completions') + (query === '?' ? '' : query)
 }
 
 /** curl's argument vector for one request (argv[0] is the curl executable). */

@@ -38,8 +38,8 @@ const BUILTIN = { messages: [u('BUILT-IN SUMMARY')] }
 type On = Parameters<TestBody>[1]
 // Stand-ins for the prompt-file lookup: no HOME, project root /proj, and the
 // files given (path -> text).
-function promptStubs(on: On, files: Record<string, string> = {}) {
-  on('env.get', () => ({ value: undefined }) as never)
+function promptStubs(on: On, files: Record<string, string> = {}, home?: string) {
+  on('env.get', (_, e: any) => ({ value: e.name === 'HOME' ? home : undefined }) as never)
   on('session.root', () => ({ value: '/proj' }) as never)
   on('fs.exists', (_, e: any) => ({ value: Object.hasOwn(files, String(e.path ?? e[0])) }) as never)
   on('fs.read', (_, e: any) => ({ value: files[String(e.path ?? e[0])] ?? '' }) as never)
@@ -308,7 +308,10 @@ test('endpointUrl: base URL normalized, apiFormat picks the path', async () => {
   expect(endpointUrl(go + '/', 'anthropic')).toBe(go + '/messages')
   expect(endpointUrl(go + '/chat/completions', 'anthropic')).toBe(go + '/messages')   // pasted full URL: format wins
   expect(endpointUrl(go + '/messages/', 'openai')).toBe(go + '/chat/completions')
-  expect(endpointUrl('https://api.anthropic.com/v1/messages?beta=1', 'anthropic')).toBe('https://api.anthropic.com/v1/messages')
+  expect(endpointUrl('https://api.anthropic.com/v1/messages?beta=1', 'anthropic')).toBe('https://api.anthropic.com/v1/messages?beta=1')
+  expect(endpointUrl('https://x.openai.azure.com/openai/v1/chat/completions?api-version=preview#frag', 'openai'))
+    .toBe('https://x.openai.azure.com/openai/v1/chat/completions?api-version=preview')   // query kept, fragment dropped
+  expect(endpointUrl('https://x.example/v1/?', 'openai')).toBe('https://x.example/v1/chat/completions')
   expect(endpointUrl('https://api.openai.com/v1/responses', 'openai')).toBe('https://api.openai.com/v1/chat/completions')
   expect(endpointUrl('opencode.ai/inference/go/v1', 'openai')).toBe(go + '/chat/completions')        // no scheme: https
   expect(endpointUrl('http://localhost:8080/v1/', 'openai')).toBe('http://localhost:8080/v1/chat/completions')
@@ -379,4 +382,66 @@ test('parseReply anthropic: input tokens from message_delta when message_start s
   const r = parseReply(go, 'anthropic')
   expect(r.ok && r.inTokens).toBe(40)
   expect(r.ok && r.outTokens).toBe(3)
+})
+
+// ---- prompt-file lookup order and steer prompt file ----
+async function systemSeen($: any, on: On, files: Record<string, string>, home?: string): Promise<string> {
+  promptStubs(on, files, home)
+  let system = ''
+  on('model.complete', (_, e: any) => { system = String(e.system); return { value: OK('S') } as never })
+  on('ui.toast', () => ({ value: undefined }) as never)
+  on('ui.log', () => ({ value: undefined }) as never)
+  on('session.compact', () => BUILTIN)
+  await $.session.compact({ trigger: 'manual', messages: TRANSCRIPT })
+  return system
+}
+
+test('prompt files: the option path wins over project and home', { options: { systemPromptFile: 'prompts/mine.md' } }, async ($, on) => {
+  const s = await systemSeen($, on, {
+    '/proj/prompts/mine.md': 'OPTION', '/proj/.claude/custom-compaction/system.md': 'PROJECT', '/h/.claude/custom-compaction/system.md': 'HOME',
+  }, '/h')
+  expect(s).toBe('OPTION')
+})
+
+test('prompt files: a missing option path falls back to the project file', { options: { systemPromptFile: '~/nope.md' } }, async ($, on) => {
+  const s = await systemSeen($, on, { '/proj/.claude/custom-compaction/system.md': 'PROJECT', '/h/.claude/custom-compaction/system.md': 'HOME' }, '/h')
+  expect(s).toBe('PROJECT')
+})
+
+test('prompt files: no project file uses the home file; an empty one is skipped', async ($, on) => {
+  const s = await systemSeen($, on, { '/proj/.claude/custom-compaction/system.md': '  \n', '/h/.claude/custom-compaction/system.md': 'HOME' }, '/h')
+  expect(s).toBe('HOME')
+})
+
+test('prompt files: nothing found uses the built-in system prompt', async ($, on) => {
+  const s = await systemSeen($, on, {}, '/h')
+  expect(s).toContain('You compact long Claude Code agent sessions')
+})
+
+test('steer mode reads its instructions from steer.md', { options: { mode: 'steer' } }, async ($, on) => {
+  promptStubs(on, { '/proj/.claude/custom-compaction/steer.md': 'MY STEER RULES' })
+  on('ui.log', () => ({ value: undefined }) as never)
+  let got = ''
+  on('session.compact', (_, e) => { got = e.instructions ?? ''; return BUILTIN })
+  await $.session.compact({ trigger: 'manual', messages: TRANSCRIPT, instructions: 'USER ARGS' })
+  expect(got).toContain('MY STEER RULES')
+  expect(got).not.toContain('Standing instructions')   // the built-in steer text is replaced
+  expect(got).toContain('USER ARGS')
+})
+
+test('refine: a failure on part 2 falls back to the built-in compaction', { options: { maxSummarizerInputTokens: 2000, maxSummaryTokens: 512, keepMessages: 2 } }, async ($, on) => {
+  promptStubs(on)
+  let calls = 0
+  on('model.complete', () => {
+    calls++
+    return { value: calls === 1 ? OK('PART-1') : { isAnswered: false, reason: 'empty-reply', usage: USAGE } } as never
+  })
+  const toasts: string[] = []
+  on('ui.toast', (_, e: any) => { toasts.push(String(e.text ?? e[0])); return { value: undefined } as never })
+  on('ui.log', () => ({ value: undefined }) as never)
+  on('session.compact', () => BUILTIN)
+  const r = await $.session.compact({ trigger: 'manual', messages: LONG })
+  expect(calls).toBe(2)
+  expect(r.messages?.[0]?.text).toBe('BUILT-IN SUMMARY')
+  expect(toasts.join(' ')).toContain('on part 2 of')
 })

@@ -95,7 +95,7 @@ Set these in `/config`, or in settings.json under
 | --- | --- | --- |
 | `mode` | `replace` | `replace`, `steer` or `off` |
 | `model` | `sonnet` | summarizer model. Without `endpoint`: alias or full id, resolved like `--model`. With `endpoint`: the provider's model id |
-| `endpoint` | `""` | empty: the session's own model (`$.model.complete`). Otherwise the provider's **base URL**, e.g. `https://opencode.ai/inference/go/v1`. Any path pasted after the base (`/chat/completions`, `/messages`, ...) is stripped; `apiFormat` adds the path |
+| `endpoint` | `""` | empty: the session's own model (`$.model.complete`). Otherwise the provider's **base URL**, e.g. `https://opencode.ai/inference/go/v1`. Any path pasted after the base (`/chat/completions`, `/messages`, ...) is stripped; `apiFormat` adds the path. A query string (e.g. Azure's `?api-version=`) is kept |
 | `apiFormat` | `openai` | `openai` (`<base>/chat/completions`) or `anthropic` (`<base>/messages`, adds `anthropic-version: 2023-06-01`, key as `x-api-key`). With a provider that offers both, switch this alone |
 | `apiKeyEnv` | `""` | NAME of the environment variable holding the endpoint key, read by curl (sent as `Authorization: Bearer`, or `x-api-key` for `anthropic`). Empty: no auth header, e.g. where a proxy injects it |
 | `curlPath` | `curl` | curl 8.3+ for endpoint calls, run directly (no shell); set a full path where PATH has an older curl |
@@ -244,6 +244,8 @@ is also where `saveSummaries` writes. The built-in system prompt is a good start
    context-limit recovery never fails because of this mod.
 
 ## Known gaps / ideas
+
+Planned ideas: [TODO.md](TODO.md).
 
 - **The summary reads as hearsay.** Haiku treated the summary as something it
   "can't check" rather than its own memory. Try rewording the wrapper (for
