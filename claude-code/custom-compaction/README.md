@@ -16,7 +16,7 @@ threshold and prompt-too-long recovery (`auto`), a plugin's
 `$.session.compact()` (`plugin`) and the engine's background pre-computation
 (`precompute`, which is skipped in replace mode).
 
-Status: **prototype, live-tested, 0.5.0** (2026-11-26). It passes `claude plugin validate`
+Status: **prototype, live-tested, 0.6.0** (2026-11-27). It passes `claude plugin validate`
 and its unit tests (`claude plugin test`, 16/16) on Claude Code 2.1.332. In
 headless test sessions it has replaced `/compact` and Claude Code's own
 mid-turn auto compactions, with both the session's own model and an external
@@ -88,7 +88,8 @@ for a `--plugin-dir` load. `claude plugin install ... --config key=value` stores
 | `model` | `sonnet` | summarizer model. Without `endpoint`: alias or full id, resolved like `--model`. With `endpoint`: the provider's model id |
 | `endpoint` | `""` | empty: the session's own model (`$.model.complete`). Otherwise the full URL of an OpenAI-compatible `chat/completions` or Anthropic-compatible `messages` endpoint |
 | `apiFormat` | `openai` | `openai` or `anthropic` (adds `anthropic-version: 2023-06-01`, key as `x-api-key`) |
-| `apiKeyEnv` | `""` | NAME of the environment variable holding the endpoint key (sent as `Authorization: Bearer`). Empty or unset: no auth header, e.g. where a proxy injects it |
+| `apiKeyEnv` | `""` | NAME of the environment variable holding the endpoint key, read by curl (sent as `Authorization: Bearer`, or `x-api-key` for `anthropic`). Empty: no auth header, e.g. where a proxy injects it |
+| `curlPath` | `curl` | curl 8.3+ for endpoint calls, run directly (no shell); set a full path where PATH has an older curl |
 | `extraHeaders` | `""` | JSON object of non-secret headers. `{sessionId}` in a value becomes the Claude Code session id, e.g. `{"x-trace":"cc-{sessionId}"}`. For an opencode.ai endpoint, `x-opencode-session` is added automatically (see below) |
 | `extraBody` | `""` | JSON object merged into the request body, e.g. `{"reasoning_effort":"low"}` |
 | `timeoutSeconds` | `480` | whole endpoint call, 30-590 |
@@ -132,12 +133,26 @@ facts correct, 0 wrong, vs 10/30 and 1 wrong for Claude Code's own compaction.
 
 ### How the endpoint call is made
 
-`$.http.fetch` stops at 30 s per call and `$.env.get` only takes a literal variable name, so the mod runs `curl`
-through `$.process.run` (up to 10 minutes) under `bash -c` with a fixed script. The request body and the non-secret
-headers go to two temp files under `/tmp` (deleted after the call); bash reads the key from the variable named in
-`apiKeyEnv` (`${!name}`, checked against `^[A-Za-z_][A-Za-z0-9_]*$`) and pipes the auth header to `curl -H @-`, so
-the key is never in argv, a file or the mod. Needs `bash` and `curl` on the machine. Any failure (curl error,
-non-2xx, empty reply) shows a toast and falls back to the built-in compaction.
+Requirement: **curl 8.3 or newer** on PATH (or at `curlPath`). Current macOS, recent Linux
+distributions and Windows 11 (`curl.exe`, built in) have it. No shell is needed: not bash, not
+PowerShell.
+
+`$.http.fetch` gives up after 30 s (measured on Claude Code 2.1.332: "aborted: no complete answer
+within" 30 s, with no option to raise it), which a long summary can exceed. And `$.env.get` only
+accepts a literal variable name. So the mod runs curl directly through `$.process.run` (an argument
+vector, no shell, up to 10 minutes):
+
+- the request body goes on curl's stdin (`--data-binary @-`): no temp files;
+- non-secret headers (format, `extraHeaders`, the automatic `x-opencode-session`) are `-H` arguments;
+- curl itself reads the key from the variable named in `apiKeyEnv` (`--variable %NAME=`, then
+  `--expand-header "Authorization: Bearer {{NAME}}"`, or `x-api-key: {{NAME}}` for the Anthropic
+  format), so the key never appears in the arguments, a file or the mod. The name must match
+  `^[A-Za-z_][A-Za-z0-9_]*$`. An unset variable sends an empty key (fine where a proxy injects it);
+- `-w` appends the HTTP status after a marker.
+
+Any failure (curl not found, curl older than 8.3, a curl error, a non-2xx status, an empty reply)
+shows a toast with the reason and falls back to the built-in compaction. Before 0.6.0 the call ran
+under `bash -c` with two temp files under `/tmp`, so it needed bash and didn't work on Windows.
 
 Text typed after `/compact` reaches the summarizer as extra instructions in
 both `replace` and `steer` mode.

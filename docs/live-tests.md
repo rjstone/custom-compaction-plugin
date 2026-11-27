@@ -118,3 +118,14 @@ disturb the work: the problems after each one were solved and tested normally.
 
 The run used 0.5.0's fixed `x-opencode-session` value; 0.5.1 sends the session id instead.
 
+## curl without a shell (0.6.0, 2026-11-27)
+
+`$.http.fetch` was measured first with a throwaway mod: a streamed request to OpenCode Go that
+needed more than 30 s was rejected after 30,022 ms ("aborted: no complete answer within" 30 s).
+0.6.0 therefore keeps curl, but runs it directly as an argument vector (no bash or PowerShell, no temp
+files; the key read by curl via `--variable`). The same call was checked by hand with the variable
+set and unset (both HTTP 200 through the sandbox proxy), then live: 2 note questions on Haiku,
+`/compact`, 1 recall turn, mod loaded with `--plugin-dir`. The debug log shows `curl with 19 args`
+(no bash), curl exited 0 in 8.2 s, DeepSeek summarized, `core never ran`; the next resumed turn ran
+at 56.4k tokens and answered the recall question correctly; no back-links. Not yet tried on Windows.
+

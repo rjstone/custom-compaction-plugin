@@ -160,13 +160,42 @@ test('endpoint: summary comes from the external call, not $.model.complete', { o
   const r = await $.session.compact({ trigger: 'plugin', messages: TRANSCRIPT })
   expect(seen.modelCalled).toBe(false)
   expect(r.messages?.[0]?.text).toContain('EXT SUMMARY')
-  expect(seen.argv).toContain('https://example.test/v1/chat/completions')
-  expect(seen.argv).toContain('MY_KEY')            // the variable NAME, never a value
-  const body = Object.values(seen.files).find(t => t.includes('"messages"')) ?? ''
+  const call = JSON.parse(seen.argv) as { argv: string[]; init?: { stdin?: string } }
+  const argv = call.argv
+  expect(argv[0]).toBe('curl')                                   // no bash, no PowerShell
+  expect(argv).toContain('https://example.test/v1/chat/completions')
+  expect(argv).toContain('%MY_KEY=')                             // curl reads the variable NAMED in apiKeyEnv
+  expect(argv).toContain('Authorization: Bearer {{MY_KEY}}')     // the value never appears
+  expect(argv).toContain('x-opencode-session: s1')
+  expect(argv.slice(-4)).toEqual(['--data-binary', '@-', '-w', STATUS_MARK + '%{http_code}'])
+  const body = call.init?.stdin ?? ''
   expect(body).toContain('"model":"deepseek-v4.1-flash"')
   expect(body).toContain('"reasoning_effort":"low"')
   expect(body).toContain('Build the thing')
-  expect(Object.values(seen.files).some(t => t.includes('x-opencode-session: s1'))).toBe(true)
+  expect(Object.keys(seen.files)).toEqual([])                    // no temp files
+})
+
+test('endpoint: curlPath and the anthropic key header', { options: { ...EP, curlPath: 'C:\\tools\\curl.exe', apiFormat: 'anthropic' } }, async ($, on) => {
+  const seen = { files: {} as Record<string, string>, argv: '', modelCalled: false }
+  endpointStubs(on, 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"A"}}\n' + STATUS_MARK + '200', seen)
+  on('session.compact', () => BUILTIN)
+  await $.session.compact({ trigger: 'plugin', messages: TRANSCRIPT })
+  const argv = (JSON.parse(seen.argv) as { argv: string[] }).argv
+  expect(argv[0]).toBe('C:\\tools\\curl.exe')
+  expect(argv).toContain('x-api-key: {{MY_KEY}}')
+  expect(argv).toContain('anthropic-version: 2023-06-01')
+})
+
+test('endpoint: an old curl (no --variable) falls back with a clear reason', { options: EP }, async ($, on) => {
+  const toasts: string[] = []
+  on('process.run', () => ({ value: { exitCode: 2, stdout: '', stderr: "curl: option --variable: is unknown" } }) as never)
+  on('ui.toast', (_, e: any) => { toasts.push(String(e.text ?? e[0])); return { value: undefined } as never })
+  on('ui.log', () => ({ value: undefined }) as never)
+  on('session.id', () => ({ value: 'sess-123' }) as never)
+  on('session.compact', () => BUILTIN)
+  const r = await $.session.compact({ trigger: 'plugin', messages: TRANSCRIPT })
+  expect(r.messages?.[0]?.text).toBe('BUILT-IN SUMMARY')
+  expect(toasts.join(' ')).toContain('older than 8.3')
 })
 
 test('endpoint: HTTP error falls back to built-in', { options: EP }, async ($, on) => {

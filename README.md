@@ -15,7 +15,7 @@ conversation is kept.
 A Claude Code **mod** (in-process function-hook plugin) on the `session.compact` event. It
 replaces every compaction Claude Code starts: `/compact`, the auto-compact threshold (also
 mid-turn), and plugin-started ones. It falls back to the built-in compaction if the summarizer
-fails, and its compactions survive a session resume.
+fails, and its compactions survive a session resume. For an external endpoint it needs curl 8.3+ (no shell).
 
 Install, at the prompt of a terminal session:
 

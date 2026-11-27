@@ -25,6 +25,7 @@ type Settings = {
   endpoint: string
   apiFormat: ApiFormat
   apiKeyEnv: string
+  curlPath: string
   extraHeaders: Record<string, string>
   extraBody: Record<string, unknown>
   timeoutSeconds: number
@@ -86,6 +87,7 @@ function settingsFrom(options: Record<string, unknown>): Settings {
     endpoint: typeof options.endpoint === 'string' ? options.endpoint.trim() : '',
     apiFormat: options.apiFormat === 'anthropic' ? 'anthropic' : 'openai',
     apiKeyEnv: typeof options.apiKeyEnv === 'string' ? options.apiKeyEnv.trim() : '',
+    curlPath: typeof options.curlPath === 'string' && options.curlPath.trim() && !/[\r\n]/.test(options.curlPath) ? options.curlPath.trim() : 'curl',
     extraHeaders: jsonObject(options.extraHeaders) as Record<string, string>,
     extraBody: jsonObject(options.extraBody),
     timeoutSeconds: clampInt(options.timeoutSeconds, 30, 590, 480),
@@ -117,23 +119,29 @@ function jsonObject(v: unknown): Record<string, unknown> {
 }
 
 // ---- External summarizer endpoint ------------------------------------------------
-// $.http.fetch caps a call at 30 s and $.env.get needs a literal variable name, so the
-// endpoint call runs curl through $.process.run (up to 10 min). bash reads the key from
-// the variable NAMED in apiKeyEnv (${!name}) and pipes the auth header to curl on stdin
-// (-H @-): the key never appears in argv, a file or the mod's own memory.
+// $.http.fetch gives up after 30 s (measured: "aborted: no complete answer within"
+// 30 s, no option to raise it), and $.env.get only takes a literal variable name. So
+// the call runs curl (8.3+) directly through $.process.run (argv, no shell; up to 10
+// min): the body goes on stdin, non-secret headers as -H arguments, and curl itself
+// reads the key from the variable NAMED in apiKeyEnv (--variable %NAME,
+// --expand-header). The key never appears in argv, a file or the mod. No bash, no
+// PowerShell, no temp files: the same call on Linux, macOS and Windows (curl.exe).
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
 export const STATUS_MARK = '\n__CUSTOM_COMPACTION_HTTP__:'
-export const CURL_SCRIPT = `set -u
-url=$1 body=$2 hdrs=$3 keyvar=$4 fmt=$5 maxt=$6
-key=""
-if [ -n "$keyvar" ]; then key=\${!keyvar:-}; fi
-if [ -n "$key" ] && [ "$fmt" = anthropic ]; then printf 'x-api-key: %s\\n' "$key"
-elif [ -n "$key" ]; then printf 'Authorization: Bearer %s\\n' "$key"
-fi | curl -sS -N --max-time "$maxt" -X POST "$url" -H 'Content-Type: application/json' -H @"$hdrs" -H @- \\
-  --data-binary @"$body" -w '${STATUS_MARK.replace('\n', '\\n')}%{http_code}'
-rc=$?
-rm -f "$body" "$hdrs"
-exit $rc`
+
+/** curl's argument vector for one request (argv[0] is the curl executable). */
+export function curlArgs(s: Settings, headers: Record<string, string>): string[] {
+  const argv = [s.curlPath, '-sS', '-N', '--max-time', String(s.timeoutSeconds), '-X', 'POST', s.endpoint,
+    '-H', 'Content-Type: application/json']
+  for (const [k, v] of Object.entries(headers)) argv.push('-H', `${k}: ${v}`)
+  if (s.apiKeyEnv) {
+    // `%NAME=` reads the environment variable NAME, empty when unset (a proxy may inject the key)
+    argv.push('--variable', `%${s.apiKeyEnv}=`, '--expand-header',
+      s.apiFormat === 'anthropic' ? `x-api-key: {{${s.apiKeyEnv}}}` : `Authorization: Bearer {{${s.apiKeyEnv}}}`)
+  }
+  argv.push('--data-binary', '@-', '-w', `${STATUS_MARK}%{http_code}`)
+  return argv
+}
 
 export type External = { ok: true; text: string; inTokens: number; outTokens: number } | { ok: false; why: string }
 
@@ -218,21 +226,25 @@ export function resolveHeaders(
 
 async function callExternal($: any, s: Settings, system: string, prompt: string): Promise<External> {
   if (s.apiKeyEnv && !ENV_NAME.test(s.apiKeyEnv)) return { ok: false, why: `apiKeyEnv "${s.apiKeyEnv}" is not a variable name` }
-  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-  const body = `/tmp/custom-compaction-${id}.body.json`
-  const hdrs = `/tmp/custom-compaction-${id}.headers`
   const headers = resolveHeaders(s.apiFormat, s.endpoint, s.extraHeaders, await $.session.id())
-  await $.fs.write(hdrs, Object.entries(headers).map(([k, v]) => `${k}: ${v}`).join('\n') + '\n')
-  await $.fs.write(body, JSON.stringify(requestBody(s, system, prompt)))
-  const r = await $.process.run(
-    ['bash', '-c', CURL_SCRIPT, 'custom-compaction', s.endpoint, body, hdrs, s.apiKeyEnv, s.apiFormat, String(s.timeoutSeconds)],
-    { timeoutMs: (s.timeoutSeconds + 10) * 1000 },
-  )
-  const out: string = r.stdout ?? ''
+  let r: { exitCode: number; stdout?: string; stderr?: string }
+  try {
+    r = await $.process.run(curlArgs(s, headers), {
+      stdin: JSON.stringify(requestBody(s, system, prompt)),
+      timeoutMs: Math.min(600_000, (s.timeoutSeconds + 10) * 1000),
+    })
+  } catch (err) {
+    return { ok: false, why: `could not run curl ("${s.curlPath}"): ${err instanceof Error ? err.message : String(err)}` }
+  }
+  const out = r.stdout ?? ''
+  const err = (r.stderr ?? '').trim()
   const at = out.lastIndexOf(STATUS_MARK)
   const status = at >= 0 ? Number(out.slice(at + STATUS_MARK.length).trim()) : 0
   const payload = at >= 0 ? out.slice(0, at) : out
-  if (r.exitCode !== 0) return { ok: false, why: `curl exit ${r.exitCode}: ${(r.stderr ?? '').trim().slice(0, 200)}` }
+  if (r.exitCode !== 0) {
+    const old = /variable|expand-header/i.test(err) && /unknown|unrecognized|not supported/i.test(err)
+    return { ok: false, why: old ? `curl is older than 8.3 (no --variable); set curlPath to a newer curl` : `curl exit ${r.exitCode}: ${err.slice(0, 200)}` }
+  }
   if (status < 200 || status >= 300) return { ok: false, why: `HTTP ${status}: ${payload.trim().slice(0, 200)}` }
   return parseReply(payload, s.apiFormat)
 }
