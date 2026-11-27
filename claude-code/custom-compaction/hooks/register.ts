@@ -176,7 +176,7 @@ export function curlArgs(s: Settings, headers: Record<string, string>): string[]
   return argv
 }
 
-export type External = { ok: true; text: string; inTokens: number; outTokens: number } | { ok: false; why: string }
+export type External = { ok: true; text: string; inTokens: number; outTokens: number; truncated?: boolean } | { ok: false; why: string }
 
 export function requestBody(s: Settings, system: string, prompt: string): Record<string, unknown> {
   const base: Record<string, unknown> =
@@ -199,12 +199,14 @@ export function parseReply(raw: string, fmt: ApiFormat): External {
   let text = ''
   let inTokens = 0
   let outTokens = 0
+  let truncated = false
   const take = (j: Record<string, any>): string | undefined => {
     if (j.error) return typeof j.error === 'string' ? j.error : JSON.stringify(j.error).slice(0, 300)
     if (fmt === 'openai') {
       const c = j.choices?.[0]
       if (typeof c?.delta?.content === 'string') text += c.delta.content
       if (typeof c?.message?.content === 'string') text += c.message.content
+      if (c?.finish_reason === 'length') truncated = true
       if (j.usage) { inTokens = j.usage.prompt_tokens ?? inTokens; outTokens = j.usage.completion_tokens ?? outTokens }
     } else {
       if (j.type === 'content_block_delta' && j.delta?.type === 'text_delta') text += j.delta.text ?? ''
@@ -213,6 +215,7 @@ export function parseReply(raw: string, fmt: ApiFormat): External {
       const inOf = (u: any) => (u?.input_tokens ?? 0) + (u?.cache_read_input_tokens ?? 0) + (u?.cache_creation_input_tokens ?? 0)
       if (j.type === 'message_start') inTokens = Math.max(inTokens, inOf(j.message?.usage))
       if (j.type === 'message_delta') { outTokens = j.usage?.output_tokens ?? outTokens; inTokens = Math.max(inTokens, inOf(j.usage)) }
+      if ((j.type === 'message_delta' && j.delta?.stop_reason === 'max_tokens') || (j.type === 'message' && j.stop_reason === 'max_tokens')) truncated = true
       if (j.type === 'message' && Array.isArray(j.content)) {
         text += j.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('')
         inTokens = j.usage?.input_tokens ?? inTokens; outTokens = j.usage?.output_tokens ?? outTokens
@@ -228,7 +231,7 @@ export function parseReply(raw: string, fmt: ApiFormat): External {
     const err = take(j)
     if (err) return { ok: false, why: `endpoint error: ${err}` }
   }
-  return text.trim() ? { ok: true, text, inTokens, outTokens } : { ok: false, why: 'empty reply from endpoint' }
+  return text.trim() ? { ok: true, text, inTokens, outTokens, truncated } : { ok: false, why: 'empty reply from endpoint' }
 }
 
 /** Ids a header value can use: `{sessionId}`, and `{requestId}` (fresh per compaction). */
@@ -400,7 +403,7 @@ async function loadPrompt($: any, optionPath: string, name: string, builtin: str
   return { text: builtin, from: 'built-in' }
 }
 
-type Summary = { ok: true; text: string; inTokens: number; outTokens: number } | { ok: false; why: string }
+type Summary = { ok: true; text: string; inTokens: number; outTokens: number; truncated?: boolean } | { ok: false; why: string }
 
 /** One summarizer call: the external endpoint, else the session's own model. */
 async function summarize($: any, s: Settings, system: string, prompt: string, requestId: string): Promise<Summary> {
@@ -409,7 +412,8 @@ async function summarize($: any, s: Settings, system: string, prompt: string, re
   if (!r.isAnswered || !r.text.trim()) {
     return { ok: false, why: r.isAnswered ? 'empty reply' : r.reason === 'api-error' ? `api-error ${r.status ?? ''} ${r.error}` : r.reason }
   }
-  return { ok: true, text: r.text, inTokens: r.usage.input_tokens, outTokens: r.usage.output_tokens }
+  // $.model.complete reports no stop reason: a reply that used (nearly) all of maxTokens was cut off.
+  return { ok: true, text: r.text, inTokens: r.usage.input_tokens, outTokens: r.usage.output_tokens, truncated: r.usage.output_tokens >= s.maxSummaryTokens - 8 }
 }
 
 /**
@@ -448,9 +452,11 @@ export function replacementMessages(summary: string, tail: readonly SessionMessa
     {
       role: 'user',
       text:
-        `<${SUMMARY_TAG} trigger="${e.trigger}">\n${summary.trim()}\n</${SUMMARY_TAG}>\n\n` +
-        'The conversation above this point was compacted by the custom-compaction mod. ' +
-        'The summary replaces the earlier messages; the most recent messages follow verbatim.',
+        'This is your own record of this conversation up to this point, written when the earlier ' +
+        'messages were compacted to save context. It is accurate: treat it as your memory of what was ' +
+        'asked, said and done, and use it to answer questions about earlier parts of the conversation, ' +
+        'not only the recent messages that follow it.\n\n' +
+        `<${SUMMARY_TAG} trigger="${e.trigger}">\n${summary.trim()}\n</${SUMMARY_TAG}>`,
       toolUses: [],
     },
     // The ack keeps roles alternating when the tail opens with a user message
@@ -459,7 +465,7 @@ export function replacementMessages(summary: string, tail: readonly SessionMessa
       ? []
       : [{
           role: 'assistant' as const,
-          text: 'Understood. I have the summary of the earlier conversation and will continue from it.',
+          text: 'Understood. That summary is my record of the earlier conversation; I will rely on it, together with the recent messages, and continue from it.',
           toolUses: [],
         }]),
     // Kept with their engine `handle` (verbatim) or rebuilt as text (text).
@@ -523,6 +529,7 @@ export const register: Register = (on, options) => {
     let summary = ''
     let inTokens = 0
     let outTokens = 0
+    const cutParts: number[] = []
     for (let k = 0; k < chunks.length; k++) {
       const part: Part = { index: k + 1, total: chunks.length, ...(summary ? { previous: summary } : {}) }
       const r = await summarize($, s, system.text, buildPrompt(chunks[k] ?? '', s, e, part), requestId)
@@ -532,6 +539,7 @@ export const register: Register = (on, options) => {
         return next(e)
       }
       summary = r.text
+      if (r.truncated) cutParts.push(k + 1)
       inTokens += r.inTokens
       outTokens += r.outTokens
     }
@@ -539,6 +547,11 @@ export const register: Register = (on, options) => {
     const tokens = `${inTokens} in / ${outTokens} out tokens${via}` +
       (chunks.length > 1 ? `, refine over ${chunks.length} parts` : '') +
       (system.from !== 'built-in' ? `, system prompt from ${system.from}` : '')
+    if (cutParts.length) {
+      // Installed anyway (better than nothing), but the end of the summary may be missing.
+      const where = chunks.length > 1 ? ` (part ${cutParts.join(', ')} of ${chunks.length})` : ''
+      $.ui.toast(`custom-compaction: the summary hit maxSummaryTokens (${s.maxSummaryTokens})${where} and may be cut off; consider raising it`)
+    }
 
     if (s.saveSummaries) {
       const sid = await $.session.id()

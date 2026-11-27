@@ -459,3 +459,32 @@ test('maxSummarizerInputTokens below 128k is raised to 128k (one part for a tran
   await $.session.compact({ trigger: 'manual', messages: mid })
   expect(calls).toBe(1)
 })
+
+test('parseReply: a cut-off reply is flagged (finish_reason length / stop_reason max_tokens)', async () => {
+  const o = parseReply('data: {"choices":[{"delta":{"content":"half"},"finish_reason":"length"}]}\n\n', 'openai')
+  expect(o.ok && o.truncated).toBe(true)
+  const a = parseReply('data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"half"}}\n\n' +
+    'data: {"type":"message_delta","delta":{"stop_reason":"max_tokens"},"usage":{"output_tokens":9}}\n\n', 'anthropic')
+  expect(a.ok && a.truncated).toBe(true)
+  expect(parseReply(SSE_OPENAI, 'openai').ok && (parseReply(SSE_OPENAI, 'openai') as any).truncated).toBe(false)
+})
+
+test('a summary that used all of maxSummaryTokens is installed with a warning', { options: { maxSummaryTokens: 512 } }, async ($, on) => {
+  promptStubs(on)
+  on('model.complete', () => ({ value: { isAnswered: true, text: 'CUT SUMMARY', usage: { ...USAGE, output_tokens: 512 } } }) as never)
+  const toasts: string[] = []
+  on('ui.toast', (_, e: any) => { toasts.push(String(e.text ?? e[0])); return { value: undefined } as never })
+  on('ui.log', () => ({ value: undefined }) as never)
+  on('session.compact', () => BUILTIN)
+  const r = await $.session.compact({ trigger: 'manual', messages: TRANSCRIPT })
+  expect(r.messages?.[0]?.text).toContain('CUT SUMMARY')
+  expect(toasts.join(' ')).toContain('may be cut off')
+})
+
+test('the summary message tells the model it is its own accurate record', async ($, on) => {
+  stubs(on, OK('S'))
+  on('session.compact', () => BUILTIN)
+  const r = await $.session.compact({ trigger: 'manual', messages: TRANSCRIPT })
+  expect(r.messages?.[0]?.text).toStartWith('This is your own record of this conversation')
+  expect(r.messages?.[0]?.text).toContain('<custom-compaction-summary trigger="manual">')
+})

@@ -248,10 +248,10 @@ is also where `saveSummaries` writes. The built-in system prompt is a good start
 
 Planned ideas: [TODO.md](TODO.md).
 
-- **The summary reads as hearsay.** Haiku treated the summary as something it
-  "can't check" rather than its own memory. Try rewording the wrapper (for
-  example "this is your own record of the conversation so far; rely on it") or
-  putting the summary in the assistant's voice.
+- **The summary used to read as hearsay.** Haiku sometimes treated the summary as something it
+  "can't check" and answered from the kept messages only. 0.7.0 opens the summary message with "This
+  is your own record of this conversation ... It is accurate: treat it as your memory"; on the case
+  that failed before (a Goodhart's-law recall), Haiku then answered from the summary. One run so far.
 - **One transient endpoint failure** fell back to core as designed. A single
   retry before falling back might be worth it for a slow summarizer.
 - **Budgets are estimates.** Token counts are characters / 3; a summarizer with a
