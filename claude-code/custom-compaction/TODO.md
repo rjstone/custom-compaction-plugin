@@ -24,6 +24,10 @@ somewhat better. An override option (`charsPerToken`) would cover models that do
   first. Add a short chronological "Q&A log" section.
 - **Check the new summary framing more widely.** 0.7.0 tells the model the summary is its own accurate
   record; it fixed the one failing recall case. Test it on more sessions and models.
+- **Drop answered open questions.** In a 2026-11-27 manual compaction (0.7.0, Opus), "Open questions"
+  kept a question the summary itself answered under "Decisions and findings". Tell the summarizer to
+  list only questions that are still open, and to drop ones answered anywhere in the summary or the
+  kept tail.
 
 ## Robustness
 
