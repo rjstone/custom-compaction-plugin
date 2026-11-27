@@ -49,8 +49,10 @@ somewhat better. An override option (`charsPerToken`) would cover models that do
   works around it with `tailMode: text`.
 - **Late load**: in a fresh process, hooks modules wait for a server-side rollout flag
   (`tengu_plugin_hooks_modules`), so a short first turn can run without the mod. Nothing to do in the mod.
-- **Other plugins' `session.compact` hooks don't run** for a compaction this mod answers (it doesn't call
-  `next(e)`). Decide whether to document a way to chain them.
+- **Other plugins' `session.compact` hooks don't run** for a compaction this mod answers. `next(e)` can't
+  fix it: it always ends in Claude Code's own compaction (`next.to` only skips to a deeper tier), so it
+  would double every compaction. Needs an engine API to call the plugins beneath without core, or a
+  shared event other mods can observe. Documented in the README.
 
 ## Smaller items (from the 0.7.0 review)
 

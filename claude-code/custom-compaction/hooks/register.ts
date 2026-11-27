@@ -40,12 +40,15 @@ type Settings = {
   systemPromptFile: string
   steerPromptFile: string
   maxSummarizerInputTokens: number
+  maxToolInputChars: number
+  maxToolResultChars: number
 }
 
 // Characters per token for budgets: an estimate for transcripts. English prose is
 // closer to 4, but transcripts are full of code, JSON, paths and mixed
 // languages, which tokenize less efficiently.
 const CHARS_PER_TOKEN = 3
+// Defaults for how much of each tool call's input and result the summarizer sees.
 const MAX_TOOL_INPUT_CHARS = 400
 const MAX_TOOL_RESULT_CHARS = 1_500
 
@@ -107,6 +110,8 @@ function settingsFrom(options: Record<string, unknown>): Settings {
     systemPromptFile: typeof options.systemPromptFile === 'string' ? options.systemPromptFile.trim() : '',
     steerPromptFile: typeof options.steerPromptFile === 'string' ? options.steerPromptFile.trim() : '',
     maxSummarizerInputTokens: clampInt(options.maxSummarizerInputTokens, 128_000, 4_000_000, 500_000),
+    maxToolInputChars: clampInt(options.maxToolInputChars, 0, 1_000_000, MAX_TOOL_INPUT_CHARS),
+    maxToolResultChars: clampInt(options.maxToolResultChars, 0, 1_000_000, MAX_TOOL_RESULT_CHARS),
   }
 }
 
@@ -320,13 +325,16 @@ export function tailStart(messages: readonly SessionMessage[], keep: number): nu
 }
 
 /** One text block per message: role, text, tool calls with cut inputs and results. */
-export function renderBlocks(messages: readonly SessionMessage[]): string[] {
+export function renderBlocks(
+  messages: readonly SessionMessage[],
+  limits: { input: number; result: number } = { input: MAX_TOOL_INPUT_CHARS, result: MAX_TOOL_RESULT_CHARS },
+): string[] {
   return messages.map((m, i) => {
     const lines = [`### [${i}] ${m.role.toUpperCase()}`]
     if (m.text) lines.push(m.text)
     for (const u of m.toolUses) {
-      lines.push(`-> tool ${u.tool} ${cut(JSON.stringify(u.input), MAX_TOOL_INPUT_CHARS)}`)
-      if (u.text !== undefined) lines.push(`<- ${u.isError ? 'ERROR ' : ''}${cut(u.text, MAX_TOOL_RESULT_CHARS)}`)
+      lines.push(`-> tool ${u.tool} ${cut(JSON.stringify(u.input), limits.input)}`)
+      if (u.text !== undefined) lines.push(`<- ${u.isError ? 'ERROR ' : ''}${cut(u.text, limits.result)}`)
     }
     // A user message's toolResults are skipped: the assistant's toolUses above
     // already carry each call's outcome text.
@@ -523,7 +531,7 @@ export const register: Register = (on, options) => {
     // summary so far (at most maxSummaryTokens) and the prompt's own text.
     const budget = s.maxSummarizerInputTokens * CHARS_PER_TOKEN
     const chunkChars = Math.max(8_000, budget - system.text.length - s.maxSummaryTokens * CHARS_PER_TOKEN - 4_000)
-    const chunks = chunkBlocks(renderBlocks(head), chunkChars)
+    const chunks = chunkBlocks(renderBlocks(head, { input: s.maxToolInputChars, result: s.maxToolResultChars }), chunkChars)
     // One id for the whole compaction (all refine calls), shared with nothing else.
     const requestId = crypto.randomUUID()
     let summary = ''

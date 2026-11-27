@@ -488,3 +488,12 @@ test('the summary message tells the model it is its own accurate record', async 
   expect(r.messages?.[0]?.text).toStartWith('This is your own record of this conversation')
   expect(r.messages?.[0]?.text).toContain('<custom-compaction-summary trigger="manual">')
 })
+
+test('maxToolResultChars / maxToolInputChars set how much of each tool call the summarizer sees', { options: { maxToolResultChars: 3, maxToolInputChars: 5, keepMessages: 2 } }, async ($, on) => {
+  const seen = { prompt: '', called: false }
+  stubs(on, OK('S'), seen)
+  on('session.compact', () => BUILTIN)
+  await $.session.compact({ trigger: 'manual', messages: TRANSCRIPT })
+  expect(seen.prompt).toContain('<- fil [... 5 chars cut]')            // "file.txt" cut to 3
+  expect(seen.prompt).toContain('-> tool Bash {"com [... 11 chars cut]') // {"command":"ls"} cut to 5
+})

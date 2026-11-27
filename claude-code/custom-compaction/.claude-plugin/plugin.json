@@ -113,6 +113,18 @@
       "description": "Most tokens sent in one summarizer request (estimated at 3 characters per token). A longer transcript is summarized in parts with refine: each call gets the summary so far plus the next part. Minimum 128000: a smaller value is raised to it.",
       "default": 500000
     },
+    "maxToolResultChars": {
+      "type": "number",
+      "title": "Tool result characters",
+      "description": "How much of each tool call's result the summarizer sees (longer results are cut). 0 shows none.",
+      "default": 1500
+    },
+    "maxToolInputChars": {
+      "type": "number",
+      "title": "Tool input characters",
+      "description": "How much of each tool call's input (its arguments, as JSON) the summarizer sees. 0 shows none.",
+      "default": 400
+    },
     "extraInstructions": {
       "type": "string",
       "title": "Extra instructions",

@@ -106,6 +106,8 @@ Set these in `/config`, or in settings.json under
 | `keepMessages` | `6` | at most this many newest messages kept verbatim (the cut moves forward to the next clean point, see below) |
 | `maxSummaryTokens` | `16000` | summarizer reply cap (the most the summary can be) |
 | `maxSummarizerInputTokens` | `500000` | most tokens per summarizer request (estimated at 3 characters per token). A longer transcript is summarized in parts with refine (see below). Adjust per model: see [Choosing maxSummarizerInputTokens](#choosing-maxsummarizerinputtokens). Minimum 128000: a smaller value is raised to it |
+| `maxToolResultChars` | `1500` | how much of each tool call's result the summarizer sees; longer results are cut with a marker. Raise it when summaries need exact quotes from tool output (it costs budget) |
+| `maxToolInputChars` | `400` | the same for each tool call's input (its arguments as JSON) |
 | `extraInstructions` | `""` | appended to the summarizer prompt every time |
 | `systemPromptFile` | `""` | the summarizer's system prompt, from a file (`~/` = home, relative = project root). See [Prompt files](#prompt-files) |
 | `steerPromptFile` | `""` | the instructions `steer` mode gives the built-in compaction, from a file |
@@ -221,7 +223,8 @@ is also where `saveSummaries` writes. The built-in system prompt is a good start
    turn then kept far more than `keepMessages`, 13 instead of 6 in the first
    live test.)
 2. **Render the head** as plain text, one block per message. Each tool call shows
-   its name and input (cut to 400 characters) and its result text (cut to 1,500).
+   its name and input (cut to `maxToolInputChars`, default 400) and its result text (cut to
+   `maxToolResultChars`, default 1,500).
    Nothing is dropped: if the rendered head doesn't fit one request
    (`maxSummarizerInputTokens` x 3 characters, less the system prompt, the summary
    so far and the prompt's own text), it is split into parts in order and
@@ -245,6 +248,14 @@ is also where `saveSummaries` writes. The built-in system prompt is a good start
    context-limit recovery never fails because of this mod.
 
 ## Known gaps / ideas
+
+- **Other plugins' compaction hooks.** This mod answers `session.compact` without calling `next(e)`,
+  so mods *beneath* it in the chain (for example Claude Code's built-in `cc-plugin-agents-md`, or Token
+  Optimizer when it loads after this mod) don't see that compaction. Mods above it, and shell
+  `PostCompact` / `SessionStart:compact` hooks, still run. Calling `next(e)` isn't a fix: it always ends
+  in Claude Code's own compaction (`next.to` only skips deeper), so every compaction would also run the
+  built-in summarizer on the full context and throw the result away, and in a context-limit recovery
+  that request can fail.
 
 Planned ideas: [TODO.md](TODO.md).
 
