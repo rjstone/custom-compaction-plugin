@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # Build a fixed question script: seeded shuffle of NOTES_DIR/*.md, 5 questions per note, each written by a
 # model from a random 10-line window. usage: gen_questions.py <seed> <n_notes>  (env NOTES_DIR, OPENCODE_API_KEY)
-import glob, json, os, random, subprocess, sys
+import glob, json, os, random, subprocess, sys, uuid
+RUN_ID = str(uuid.uuid4())  # OpenCode wants a stable id per conversation; one per generator run
 NOTES = os.environ['NOTES_DIR']
 SEED, N_NOTES, PER_NOTE, WIN = int(sys.argv[1]), int(sys.argv[2]), 5, 10
 rng = random.Random(SEED)
@@ -12,7 +13,7 @@ def ask(prompt):
     body = json.dumps({'model': 'deepseek-v4.1-flash', 'max_tokens': 4000,
                        'messages': [{'role': 'user', 'content': prompt}]})
     r = subprocess.run(['curl', '-s', '-m', '240', 'https://opencode.ai/inference/go/v1/chat/completions',
-                        '-H', 'Authorization: Bearer ' + os.environ.get('OPENCODE_API_KEY', 'inserted-by-proxy'), '-H', 'x-opencode-session: custom-compaction-qgen',
+                        '-H', 'Authorization: Bearer ' + os.environ.get('OPENCODE_API_KEY', 'inserted-by-proxy'), '-H', f'x-opencode-session: qgen-{RUN_ID}',
                         '-H', 'Content-Type: application/json', '--data-binary', '@-'], input=body, capture_output=True, text=True)
     return json.loads(r.stdout)['choices'][0]['message']['content']
 for f in files:

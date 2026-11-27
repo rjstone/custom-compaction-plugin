@@ -187,13 +187,41 @@ export function parseReply(raw: string, fmt: ApiFormat): External {
   return text.trim() ? { ok: true, text, inTokens, outTokens } : { ok: false, why: 'empty reply from endpoint' }
 }
 
+/**
+ * The non-secret request headers: the format's own, then `extraHeaders` with
+ * `{sessionId}` in a value replaced by the Claude Code session id. OpenCode Go
+ * wants "a stable session ID in x-opencode-session for each conversation"
+ * (routing and prompt caching), so for an opencode.ai endpoint the mod adds
+ * that header itself when `extraHeaders` doesn't set it. Header lines with a
+ * CR or LF are dropped.
+ */
+export function resolveHeaders(
+  apiFormat: string,
+  endpoint: string,
+  extraHeaders: Record<string, string>,
+  sessionId: string,
+): Record<string, string> {
+  const headers: Record<string, string> = apiFormat === 'anthropic' ? { 'anthropic-version': '2023-06-01' } : {}
+  for (const [k, v] of Object.entries(extraHeaders)) {
+    if (typeof v !== 'string') continue
+    const value = v.split('{sessionId}').join(sessionId)
+    if (!/[\r\n]/.test(k + value)) headers[k] = value
+  }
+  let host = ''
+  try { host = new URL(endpoint).hostname } catch { /* not a URL: no automatic header */ }
+  const hasSession = Object.keys(headers).some(k => k.toLowerCase() === 'x-opencode-session')
+  if (!hasSession && (host === 'opencode.ai' || host.endsWith('.opencode.ai')) && sessionId && !/[\r\n]/.test(sessionId)) {
+    headers['x-opencode-session'] = sessionId
+  }
+  return headers
+}
+
 async function callExternal($: any, s: Settings, system: string, prompt: string): Promise<External> {
   if (s.apiKeyEnv && !ENV_NAME.test(s.apiKeyEnv)) return { ok: false, why: `apiKeyEnv "${s.apiKeyEnv}" is not a variable name` }
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
   const body = `/tmp/custom-compaction-${id}.body.json`
   const hdrs = `/tmp/custom-compaction-${id}.headers`
-  const headers: Record<string, string> = s.apiFormat === 'anthropic' ? { 'anthropic-version': '2023-06-01' } : {}
-  for (const [k, v] of Object.entries(s.extraHeaders)) if (typeof v === 'string' && !/[\r\n]/.test(k + v)) headers[k] = v
+  const headers = resolveHeaders(s.apiFormat, s.endpoint, s.extraHeaders, await $.session.id())
   await $.fs.write(hdrs, Object.entries(headers).map(([k, v]) => `${k}: ${v}`).join('\n') + '\n')
   await $.fs.write(body, JSON.stringify(requestBody(s, system, prompt)))
   const r = await $.process.run(

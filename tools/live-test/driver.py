@@ -19,7 +19,7 @@ THRESH = int(os.environ.get('COMPACT_AT_TOKENS', '99999999'))
 N_COMPACT = int(os.environ.get('N_COMPACT', '3'))
 opts = {'mode': MODE, 'saveSummaries': True, 'endpoint': 'https://opencode.ai/inference/go/v1/chat/completions',
         'apiFormat': 'openai', 'model': 'deepseek-v4.1-flash', 'apiKeyEnv': 'OPENCODE_API_KEY',
-        'extraHeaders': json.dumps({'x-opencode-session': f'custom-compaction-{MODE}', 'User-Agent': 'custom-compaction-live-test'}),
+        'extraHeaders': json.dumps({'User-Agent': 'custom-compaction-live-test'}),  # x-opencode-session: added by the mod
         'maxSummaryTokens': 16000, 'autoTrigger': os.environ.get('AUTO_TRIGGER', 'replace')}
 json.dump({'autoCompactWindow': int(WINDOW), 'pluginConfigs': {'custom-compaction': {'options': opts},
            'custom-compaction@inline': {'options': opts}}}, open(f'{W}/settings.json', 'w'), indent=1)

@@ -5,6 +5,7 @@
 
 import type { SessionMessage } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
+import { resolveHeaders } from '../hooks/register'
 import type { TestBody } from 'claude-code/testing'
 
 const u = (text: string): SessionMessage => ({ role: 'user', text, toolUses: [] })
@@ -149,6 +150,7 @@ function endpointStubs(on: On, stdout: string, seen: { files: Record<string, str
   on('model.complete', () => { seen.modelCalled = true; return { value: OK('SHOULD NOT BE USED') } as never })
   on('ui.toast', () => ({ value: undefined }) as never)
   on('ui.log', () => ({ value: undefined }) as never)
+  on('session.id', () => ({ value: 'sess-123' }) as never)
 }
 
 test('endpoint: summary comes from the external call, not $.model.complete', { options: EP }, async ($, on) => {
@@ -247,4 +249,13 @@ test('text tail mid tool round (auto, autoTrigger replace): ends on a user conti
   expect(msgs[msgs.length - 1]?.text).toContain('Continue the task')
   expect(msgs[msgs.length - 2]?.text).toContain('[tool Bash')
   for (let k = 1; k < msgs.length; k++) expect(msgs[k]?.role).not.toBe(msgs[k - 1]?.role)
+})
+
+test('resolveHeaders: {sessionId} placeholder, automatic x-opencode-session for opencode.ai only', async () => {
+  const go = 'https://opencode.ai/inference/go/v1/chat/completions'
+  expect(resolveHeaders('openai', go, { 'x-opencode-session': 'cc-{sessionId}' }, 'S1')).toEqual({ 'x-opencode-session': 'cc-S1' })
+  expect(resolveHeaders('openai', go, {}, 'S1')).toEqual({ 'x-opencode-session': 'S1' })
+  expect(resolveHeaders('openai', go, { 'X-OpenCode-Session': 'fixed' }, 'S1')).toEqual({ 'X-OpenCode-Session': 'fixed' })
+  expect(resolveHeaders('anthropic', 'https://api.example.com/v1/messages', {}, 'S1')).toEqual({ 'anthropic-version': '2023-06-01' })
+  expect(resolveHeaders('openai', 'https://openrouter.ai/api/v1/chat/completions', { a: 'x\ny' }, 'S1')).toEqual({})
 })

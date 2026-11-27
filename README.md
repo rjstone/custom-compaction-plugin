@@ -37,13 +37,15 @@ Example: summarize with DeepSeek V4.1 Flash on OpenCode Go, in `settings.json`:
         "endpoint": "https://opencode.ai/inference/go/v1/chat/completions",
         "apiFormat": "openai",
         "model": "deepseek-v4.1-flash",
-        "apiKeyEnv": "OPENCODE_API_KEY",
-        "extraHeaders": "{\"x-opencode-session\":\"custom-compaction\"}"
+        "apiKeyEnv": "OPENCODE_API_KEY"
       }
     }
   }
 }
 ```
+
+For an opencode.ai endpoint the mod sends OpenCode's `x-opencode-session` header itself, set to the
+Claude Code session id (OpenCode asks for a stable id per conversation, for routing and prompt caching).
 
 ## Docs
 

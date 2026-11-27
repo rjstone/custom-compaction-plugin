@@ -1,6 +1,6 @@
 {
   "name": "custom-compaction",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Replaces Claude Code's built-in compaction with a custom summarizer prompt and transcript layout; the summarizer can be any OpenAI- or Anthropic-compatible endpoint.",
   "author": {
     "name": "rjstone"
@@ -58,7 +58,7 @@
     "extraHeaders": {
       "type": "string",
       "title": "Extra request headers (JSON object)",
-      "description": "Non-secret headers, e.g. {\"x-opencode-session\":\"compaction\"}. Never put keys here; use apiKeyEnv.",
+      "description": "JSON object of non-secret headers; {sessionId} in a value becomes the Claude Code session id. For an opencode.ai endpoint, x-opencode-session is added automatically (the session id) unless set here.",
       "default": ""
     },
     "extraBody": {

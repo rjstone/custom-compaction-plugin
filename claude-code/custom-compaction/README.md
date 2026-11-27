@@ -88,7 +88,7 @@ key may be `custom-compaction@inline`).
 | `endpoint` | `""` | empty: the session's own model (`$.model.complete`). Otherwise the full URL of an OpenAI-compatible `chat/completions` or Anthropic-compatible `messages` endpoint |
 | `apiFormat` | `openai` | `openai` or `anthropic` (adds `anthropic-version: 2023-06-01`, key as `x-api-key`) |
 | `apiKeyEnv` | `""` | NAME of the environment variable holding the endpoint key (sent as `Authorization: Bearer`). Empty or unset: no auth header, e.g. where a proxy injects it |
-| `extraHeaders` | `""` | JSON object of non-secret headers, e.g. `{"x-opencode-session":"compaction"}` |
+| `extraHeaders` | `""` | JSON object of non-secret headers. `{sessionId}` in a value becomes the Claude Code session id, e.g. `{"x-trace":"cc-{sessionId}"}`. For an opencode.ai endpoint, `x-opencode-session` is added automatically (see below) |
 | `extraBody` | `""` | JSON object merged into the request body, e.g. `{"reasoning_effort":"low"}` |
 | `timeoutSeconds` | `480` | whole endpoint call, 30-590 |
 | `stream` | `true` | server-sent events (OpenCode Go cuts non-streamed calls at 300 s) |
@@ -112,7 +112,6 @@ key may be `custom-compaction@inline`).
         "apiFormat": "openai",
         "model": "deepseek-v4.1-flash",
         "apiKeyEnv": "OPENCODE_API_KEY",
-        "extraHeaders": "{\"x-opencode-session\":\"custom-compaction\",\"User-Agent\":\"custom-compaction/0.2\"}",
         "maxSummaryTokens": 16000
       }
     }
@@ -120,8 +119,11 @@ key may be `custom-compaction@inline`).
 }
 ```
 
-Go **requires** the `x-opencode-session` header: without it the call fails with `MissingSessionID`, so keep it in
-`extraHeaders`. Go also accepts the Anthropic format at `.../inference/go/v1/messages` (`"apiFormat": "anthropic"`).
+Go **requires** the `x-opencode-session` header (without it the call fails with `MissingSessionID`). OpenCode's docs:
+"Send a stable session ID in x-opencode-session for each conversation so we can optimize routing and prompt
+caching." Since 0.5.1 the mod sends it automatically for an opencode.ai endpoint, set to the Claude Code session id
+(stable for the conversation, unique across conversations). To set your own, put `x-opencode-session` in
+`extraHeaders` (`{sessionId}` works there). Go also accepts the Anthropic format at `.../inference/go/v1/messages` (`"apiFormat": "anthropic"`).
 In a Claude Code cloud sandbox whose proxy injects the key, `apiKeyEnv` can name a variable holding a placeholder
 (tested: `OPENCODE_API_KEY=inserted-by-proxy`; the proxy rewrites the `Authorization` header). Why this choice of
 summarizer: in an earlier private comparison on one real session span, DeepSeek's summary scored 16/30
