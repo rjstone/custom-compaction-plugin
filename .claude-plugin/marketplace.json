@@ -1,0 +1,12 @@
+{
+  "name": "custom-compaction",
+  "owner": { "name": "rjstone" },
+  "description": "Customizable conversation compaction for agent harnesses. Claude Code plugins live under claude-code/.",
+  "plugins": [
+    {
+      "name": "custom-compaction",
+      "source": "./claude-code/custom-compaction",
+      "description": "Replaces Claude Code's built-in compaction with a custom summarizer prompt, model or external endpoint, and transcript layout."
+    }
+  ]
+}

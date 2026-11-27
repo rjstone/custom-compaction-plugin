@@ -1,0 +1,8 @@
+# engine-written editor types (per plugin)
+.claude-plugin/types/
+**/.claude-plugin/types/
+# summaries written by saveSummaries when run from inside the repo
+.claude/custom-compaction/
+# live-test run folders
+runs/
+__pycache__/

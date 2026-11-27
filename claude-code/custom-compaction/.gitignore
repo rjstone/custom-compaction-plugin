@@ -1,0 +1,4 @@
+# written by the engine when the mod loads
+.claude-plugin/types/
+# saveSummaries output if run from this folder
+.claude/custom-compaction/

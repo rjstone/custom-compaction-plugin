@@ -1,0 +1,123 @@
+{
+  "name": "custom-compaction",
+  "version": "0.5.0",
+  "description": "Replaces Claude Code's built-in compaction with a custom summarizer prompt and transcript layout; the summarizer can be any OpenAI- or Anthropic-compatible endpoint.",
+  "author": {
+    "name": "rjstone"
+  },
+  "userConfig": {
+    "mode": {
+      "type": "string",
+      "title": "Mode",
+      "description": "replace: our own summarizer writes the new transcript. steer: built-in compaction with our instructions. off: built-in, untouched.",
+      "options": [
+        "replace",
+        "steer",
+        "off"
+      ],
+      "default": "replace"
+    },
+    "autoTrigger": {
+      "type": "string",
+      "title": "Auto compactions",
+      "description": "replace (default): also replace Claude Code's own mid-turn auto compactions (live-tested to survive resume with tailMode text); core: leave them to Claude Code.",
+      "options": [
+        "core",
+        "replace"
+      ],
+      "default": "replace"
+    },
+    "model": {
+      "type": "string",
+      "title": "Summarizer model",
+      "description": "Summarizer model. Without `endpoint`: an alias or id resolved like --model (session credentials). With `endpoint`: the provider's model id, e.g. deepseek-v4.1-flash.",
+      "default": "sonnet"
+    },
+    "endpoint": {
+      "type": "string",
+      "title": "Summarizer endpoint URL",
+      "description": "Empty: use the session's own model ($.model.complete). Otherwise the full URL of an OpenAI-compatible chat/completions or Anthropic-compatible messages endpoint, e.g. https://opencode.ai/inference/go/v1/chat/completions.",
+      "default": ""
+    },
+    "apiFormat": {
+      "type": "string",
+      "title": "Endpoint API format",
+      "description": "openai: POST {model, messages, max_tokens}; anthropic: POST {model, system, messages, max_tokens} with anthropic-version.",
+      "options": [
+        "openai",
+        "anthropic"
+      ],
+      "default": "openai"
+    },
+    "apiKeyEnv": {
+      "type": "string",
+      "title": "API key environment variable",
+      "description": "Name of the environment variable holding the endpoint's key (sent as Authorization: Bearer, or x-api-key for anthropic). Empty or unset: no auth header (e.g. a proxy injects it).",
+      "default": ""
+    },
+    "extraHeaders": {
+      "type": "string",
+      "title": "Extra request headers (JSON object)",
+      "description": "Non-secret headers, e.g. {\"x-opencode-session\":\"compaction\"}. Never put keys here; use apiKeyEnv.",
+      "default": ""
+    },
+    "extraBody": {
+      "type": "string",
+      "title": "Extra request body fields (JSON object)",
+      "description": "Merged into the request body, e.g. {\"reasoning_effort\":\"low\"}.",
+      "default": ""
+    },
+    "timeoutSeconds": {
+      "type": "number",
+      "title": "Endpoint timeout (seconds)",
+      "description": "Whole-request limit for the endpoint call, 30-590.",
+      "default": 480
+    },
+    "stream": {
+      "type": "boolean",
+      "title": "Stream the endpoint reply",
+      "description": "Use server-sent events (some providers cut long non-streamed calls).",
+      "default": true
+    },
+    "keepMessages": {
+      "type": "number",
+      "title": "Recent messages kept verbatim",
+      "description": "How many of the newest transcript messages survive compaction as-is (rounded back to a clean turn boundary).",
+      "default": 6
+    },
+    "tailMode": {
+      "type": "string",
+      "title": "Kept tail format",
+      "description": "text: recent messages kept as plain text with tool calls as one-line notes (survives resume); verbatim: kept as the engine's own messages (a kept tool result breaks the transcript chain on resume).",
+      "options": [
+        "text",
+        "verbatim"
+      ],
+      "default": "text"
+    },
+    "maxSummaryTokens": {
+      "type": "number",
+      "title": "Summary token cap",
+      "description": "maxTokens for the summarizer reply.",
+      "default": 8000
+    },
+    "extraInstructions": {
+      "type": "string",
+      "title": "Extra instructions",
+      "description": "Appended to the summarizer prompt on every compaction.",
+      "default": ""
+    },
+    "applyToSubagents": {
+      "type": "boolean",
+      "title": "Apply to subagents",
+      "description": "Also replace compaction of subagent / fork transcripts (agentId set).",
+      "default": false
+    },
+    "saveSummaries": {
+      "type": "boolean",
+      "title": "Save summaries to disk",
+      "description": "Write each custom summary to .claude/custom-compaction/ under the working directory.",
+      "default": false
+    }
+  }
+}
