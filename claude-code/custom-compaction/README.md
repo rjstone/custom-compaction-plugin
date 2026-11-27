@@ -118,8 +118,8 @@ Set these in `/config`, or in settings.json under
 
 The default, 500,000 tokens, is the lowest input limit found across more than 10 summarizer models
 tested, many of them free tiers. The mod measures characters, not tokens, and converts at **3
-characters per token** (about 1.5 million characters for the default). That's a conservative
-estimate: English prose is closer to 4, but transcripts are full of code, JSON, paths and sometimes
+characters per token** (about 1.5 million characters for the default). That's an estimate for
+transcripts: English prose is closer to 4, but transcripts are full of code, JSON, paths and sometimes
 mixed languages, which tokenize less efficiently, and tokenizers differ between models.
 It may need adjusting for the model you use, and usually it can go **higher**: check the model's
 context window and the provider's request limit, and leave room for the reply
@@ -203,7 +203,10 @@ first one found wins:
 3. `~/.claude/custom-compaction/system.md` / `steer.md` (for every project);
 4. the built-in prompt (in `hooks/register.ts`, `SYSTEM` and `STEER`).
 
-An empty file is skipped. The compaction log line names the file used. `.claude/custom-compaction/`
+Project files win over home files, like project settings over user settings, so a cloned repository's
+`.claude/custom-compaction/system.md` replaces your own prompt there: check it as you would its
+`CLAUDE.md`. An empty file is skipped, and a set path that can't be used is logged before the
+defaults are tried. The compaction log line names the file used. `.claude/custom-compaction/`
 is also where `saveSummaries` writes. The built-in system prompt is a good starting point to copy.
 
 ## How replace mode works

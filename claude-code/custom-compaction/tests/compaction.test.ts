@@ -310,6 +310,8 @@ test('endpointUrl: base URL normalized, apiFormat picks the path', async () => {
   expect(endpointUrl(go + '/messages/', 'openai')).toBe(go + '/chat/completions')
   expect(endpointUrl('https://api.anthropic.com/v1/messages?beta=1', 'anthropic')).toBe('https://api.anthropic.com/v1/messages')
   expect(endpointUrl('https://api.openai.com/v1/responses', 'openai')).toBe('https://api.openai.com/v1/chat/completions')
+  expect(endpointUrl('opencode.ai/inference/go/v1', 'openai')).toBe(go + '/chat/completions')        // no scheme: https
+  expect(endpointUrl('http://localhost:8080/v1/', 'openai')).toBe('http://localhost:8080/v1/chat/completions')
 })
 
 test('chunkBlocks: in order, nothing dropped, long blocks cut', async () => {

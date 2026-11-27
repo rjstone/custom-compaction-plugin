@@ -42,7 +42,7 @@ type Settings = {
   maxSummarizerInputTokens: number
 }
 
-// Characters per token for budgets: a conservative estimate. English prose is
+// Characters per token for budgets: an estimate for transcripts. English prose is
 // closer to 4, but transcripts are full of code, JSON, paths and mixed
 // languages, which tokenize less efficiently.
 const CHARS_PER_TOKEN = 3
@@ -146,6 +146,8 @@ export const STATUS_MARK = '\n__CUSTOM_COMPACTION_HTTP__:'
  */
 export function endpointUrl(endpoint: string, apiFormat: ApiFormat): string {
   let base = endpoint.trim().replace(/[?#].*$/, '')
+  // No scheme: assume https (curl would guess http and send the key in the clear).
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(base)) base = `https://${base}`
   for (;;) {
     const next = base.replace(/\/+$/, '').replace(/\/(?:chat\/completions|completions|messages|responses)$/i, '')
     if (next === base) break
@@ -258,7 +260,7 @@ export function resolveHeaders(
 
 async function callExternal($: any, s: Settings, system: string, prompt: string, requestId: string): Promise<External> {
   if (s.apiKeyEnv && !ENV_NAME.test(s.apiKeyEnv)) return { ok: false, why: `apiKeyEnv "${s.apiKeyEnv}" is not a variable name` }
-  const headers = resolveHeaders(s.apiFormat, s.endpoint, s.extraHeaders, { sessionId: await $.session.id(), requestId })
+  const headers = resolveHeaders(s.apiFormat, endpointUrl(s.endpoint, s.apiFormat), s.extraHeaders, { sessionId: await $.session.id(), requestId })
   let r: { exitCode: number; stdout?: string; stderr?: string }
   try {
     r = await $.process.run(curlArgs(s, headers), {
@@ -308,7 +310,6 @@ export function tailStart(messages: readonly SessionMessage[], keep: number): nu
   return n
 }
 
-/** The transcript as plain text for the summarizer, within a size budget. */
 /** One text block per message: role, text, tool calls with cut inputs and results. */
 export function renderBlocks(messages: readonly SessionMessage[]): string[] {
   return messages.map((m, i) => {
@@ -322,11 +323,6 @@ export function renderBlocks(messages: readonly SessionMessage[]): string[] {
     // already carry each call's outcome text.
     return lines.join('\n')
   })
-}
-
-/** The whole transcript as one text (no budget). */
-export function renderTranscript(messages: readonly SessionMessage[]): string {
-  return renderBlocks(messages).join('\n\n')
 }
 
 /**
@@ -386,13 +382,14 @@ async function loadPrompt($: any, optionPath: string, name: string, builtin: str
     ...(root ? [`${root}/.claude/custom-compaction/${name}`] : []),
     ...(home ? [`${home}/.claude/custom-compaction/${name}`] : []),
   ]
-  for (const path of candidates) {
+  for (const [i, path] of candidates.entries()) {
     try {
       if (await $.fs.exists(path)) {
         const text = String(await $.fs.read(path))
         if (text.trim()) return { text, from: path }
       }
     } catch { /* unreadable: try the next */ }
+    if (i === 0 && optionPath) $.ui.log(`custom-compaction: prompt file "${optionPath}" not found, empty or unreadable; trying the defaults`)
   }
   return { text: builtin, from: 'built-in' }
 }
@@ -485,6 +482,7 @@ export const register: Register = (on, options) => {
 
     if (s.mode === 'steer') {
       const steer = await loadPrompt($, s.steerPromptFile, 'steer.md', STEER)
+      $.ui.log(`custom-compaction (${e.trigger}): steer mode, instructions from ${steer.from}`, { to: 'debug' })
       const instructions = [steer.text, s.extraInstructions, e.instructions].filter(x => x && x.trim()).join('\n\n')
       return next({ ...e, instructions })
     }

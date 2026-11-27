@@ -64,7 +64,7 @@
     "extraHeaders": {
       "type": "string",
       "title": "Extra request headers (JSON object)",
-      "description": "JSON object of non-secret headers; {sessionId} in a value becomes the Claude Code session id. For an opencode.ai endpoint, x-opencode-session is added automatically (the session id) unless set here.",
+      "description": "JSON object of non-secret headers. In a value, {requestId} becomes a fresh UUID per compaction (the same for all of its refine calls) and {sessionId} the Claude Code session id. For an opencode.ai endpoint, x-opencode-session is added automatically (the per-compaction id) unless set here.",
       "default": ""
     },
     "extraBody": {
