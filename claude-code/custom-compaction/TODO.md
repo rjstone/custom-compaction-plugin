@@ -44,7 +44,8 @@ somewhat better. An override option (`charsPerToken`) would cover models that do
 
 - **Test on Windows**: `curl.exe` (needs 8.3+ for `--variable`), `USERPROFILE`, drive-letter paths, and
   `~\` in prompt paths (only `~/` is expanded today).
-- **Report the engine bug** (`/feedback`): kept tool-result messages handed back by a `session.compact`
+- **Engine bug reported** via `/feedback` on 2026-11-27 (watch for a fix; then `tailMode: verbatim` could
+  become safe again): kept tool-result messages handed back by a `session.compact`
   hook are written with their original `parentUuid`, so a resumed session reloads the old history. The mod
   works around it with `tailMode: text`.
 - **Late load**: in a fresh process, hooks modules wait for a server-side rollout flag
