@@ -58,7 +58,6 @@ somewhat better. An override option (`charsPerToken`) would cover models that do
 
 ## Smaller items (from the 0.7.0 review)
 
-- Pin the GitHub Actions in `.github/workflows/release.yml` to commit SHAs instead of tags.
 - Count cache tokens for non-streamed Anthropic replies too (the SSE path does).
 - `saveSummaries` writes relative to the working directory; prompt files resolve from the project root.
   Use the project root for both.
@@ -68,6 +67,6 @@ somewhat better. An override option (`charsPerToken`) would cover models that do
 ## Releases
 
 - v0.6.0 has a tag but no GitHub Release (the release workflow didn't exist yet): create one by hand.
-- Set up the notify workflow's GitHub App: `MARKETPLACE_APP_ID` (variable) and
+- Set up the notify workflow's GitHub App: `MARKETPLACE_APP_CLIENT_ID` (variable, the App's Client ID) and
   `MARKETPLACE_APP_PRIVATE_KEY` (secret) in this repo; the workflow file is in place.
 
