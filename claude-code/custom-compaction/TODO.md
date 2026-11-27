@@ -71,6 +71,4 @@ somewhat better. An override option (`charsPerToken`) would cover models that do
 ## Releases
 
 - v0.6.0 has a tag but no GitHub Release (the release workflow didn't exist yet): create one by hand.
-- Set up the notify workflow's GitHub App: `MARKETPLACE_APP_CLIENT_ID` (variable, the App's Client ID) and
-  `MARKETPLACE_APP_PRIVATE_KEY` (secret) in this repo; the workflow file is in place.
 
