@@ -28,11 +28,32 @@ This repository is public. Never commit:
   variable at runtime, never stored in options or files;
 - paths or names from private repositories or machines.
 
-## Versioning and commits
+## Versioning, commits and releases
 
+- **Conventional commits** (from 2026-11-27): `feat:`, `fix:`, `docs:`, `refactor:`, `perf:`,
+  `test:`, `chore:`/`ci:`/`build:`, with an optional scope (`feat(claude-code): ...`) and `!` or a
+  `BREAKING CHANGE:` footer for breaking changes. git-cliff groups the changelog by these
+  (`cliff.toml`). Older commits (`custom-compaction X.Y.Z: ...`) are listed under "Changes".
 - Bump the plugin's `version` in its manifest for each behaviour change, and say in the commit
-  message what changed and how it was tested (unit tests, live test).
+  body what changed and how it was tested (unit tests, live test).
 - Don't commit generated editor types (`.claude-plugin/types/`, git-ignored).
+- **`CHANGELOG.md` is generated**: never edit it by hand. Regenerate with
+  `npx git-cliff@2.14.2 -o CHANGELOG.md`.
+
+Releasing `vX.Y.Z`:
+
+1. Set `version` in `claude-code/custom-compaction/.claude-plugin/plugin.json` to `X.Y.Z`.
+2. `npx git-cliff@2.14.2 --tag vX.Y.Z -o CHANGELOG.md`, then commit both as
+   `chore(release): vX.Y.Z` and push `main`.
+3. Tag that commit `vX.Y.Z` and push the tag (GitHub: Releases > new tag; or
+   `git tag vX.Y.Z && git push origin vX.Y.Z`). Cloud agent sessions can't push tags: ask the
+   maintainer. `.github/workflows/release.yml` then publishes a GitHub Release with git-cliff's
+   notes for that tag.
+4. The `rjstone/plugin-marketplace` update job picks up the new tag (daily, or at once if this repo
+   has its notify workflow) and points the `custom-compaction@rjstone` entry at it.
+
+Tags must be `vX.Y.Z` (the marketplace ignores other forms, including `claude plugin tag`'s
+`name--vX.Y.Z`).
 
 ## Live tests
 

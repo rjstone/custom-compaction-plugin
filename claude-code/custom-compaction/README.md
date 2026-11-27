@@ -78,9 +78,10 @@ its first moments without the mod (see [live tests](../../docs/live-tests.md)).
 ## Options (`userConfig`)
 
 Set these in `/config`, or in settings.json under
-`pluginConfigs["custom-compaction@custom-compaction"].options` for a plugin installed from this
-marketplace (`<plugin>@<marketplace>`; live-tested 2026-11-27), or `custom-compaction@inline`
-for a `--plugin-dir` load. `claude plugin install ... --config key=value` stores them there too.
+`pluginConfigs["<plugin>@<marketplace>"].options`, keyed by the marketplace you installed from:
+`custom-compaction@custom-compaction` from this repo's marketplace, `custom-compaction@rjstone` from
+[rjstone/plugin-marketplace](https://github.com/rjstone/plugin-marketplace) (both live-tested
+2026-11-27), or `custom-compaction@inline` for a `--plugin-dir` load. `claude plugin install ... --config key=value` stores them there too.
 
 | Option | Default | Meaning |
 | --- | --- | --- |
