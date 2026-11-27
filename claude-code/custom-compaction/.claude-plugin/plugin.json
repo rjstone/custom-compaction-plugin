@@ -5,6 +5,7 @@
   "author": {
     "name": "rjstone"
   },
+  "icon": ".claude-plugin/icon.png",
   "userConfig": {
     "mode": {
       "type": "string",

@@ -1,0 +1,33 @@
+# CI: shared assets in sync, plugin and marketplace validation, unit tests.
+# Actions are pinned to commit SHAs (the version is in the comment).
+name: check
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Plugin icons match assets/icon.png
+        run: |
+          # assets/icon.png is the one to edit; each plugin folder carries a copy (an install only
+          # fetches the plugin folder, so plugin.json can't point outside it).
+          copies=$(find . -name icon.png -not -path './assets/*' -not -path './.git/*')
+          [ -n "$copies" ] || { echo "no plugin icon copies found"; exit 1; }
+          status=0
+          for f in $copies; do
+            if cmp -s assets/icon.png "$f"; then echo "ok: $f"; else echo "::error file=$f::differs from assets/icon.png (copy it again)"; status=1; fi
+          done
+          exit $status
+      - name: Validate the marketplace and plugin
+        run: npx -y @anthropic-ai/claude-code@2.1.332 plugin validate .
+      - name: Validate the plugin against the plugin directory's checks
+        run: npx -y @anthropic-ai/claude-code@2.1.332 plugin validate claude-code/custom-compaction --profile directory
+      - name: Unit tests
+        run: npx -y @anthropic-ai/claude-code@2.1.332 plugin test claude-code/custom-compaction
