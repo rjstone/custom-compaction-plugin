@@ -17,26 +17,39 @@ replaces every compaction Claude Code starts: `/compact`, the auto-compact thres
 mid-turn), and plugin-started ones. It falls back to the built-in compaction if the summarizer
 fails, and its compactions survive a session resume. For an external endpoint it needs curl 8.3+ (no shell).
 
-Install from this repo's marketplace or from [rjstone/plugin-marketplace](https://github.com/rjstone/plugin-marketplace)
-(`/plugin install custom-compaction@rjstone` after `/plugin marketplace add rjstone/plugin-marketplace`).
-At the prompt of a terminal session:
+Install from the central marketplace, [rjstone/plugin-marketplace](https://github.com/rjstone/plugin-marketplace),
+at the prompt of a terminal session:
 
 ```
-/plugin install custom-compaction --marketplace rjstone/custom-compaction-plugin
+/plugin marketplace add rjstone/plugin-marketplace
+/plugin install custom-compaction@rjstone
 ```
 
-From a shell: `claude plugin install custom-compaction --marketplace rjstone/custom-compaction-plugin`.
-Then answer `y` to add the marketplace and pick a scope. Options (summarizer model or endpoint,
+Or in one step from a shell, with options set at the same time (`--scope project` limits it to the
+current project):
+
+```sh
+claude plugin install custom-compaction --marketplace rjstone/plugin-marketplace \
+  --config endpoint=https://opencode.ai/inference/go/v1/chat/completions --config apiFormat=openai \
+  --config model=deepseek-v4.1-flash --config apiKeyEnv=OPENCODE_API_KEY
+```
+
+The central marketplace lists the latest release tag (pinned by commit). This repo is also a
+marketplace of its own (`--marketplace rjstone/custom-compaction-plugin`, plugin id
+`custom-compaction@custom-compaction`), which follows `main`.
+
+Answer `y` to add the marketplace and pick a scope. Options (summarizer model or endpoint,
 kept messages, prompt additions) are in the [plugin README](claude-code/custom-compaction/README.md).
 
-Example: summarize with DeepSeek V4.1 Flash on OpenCode Go, in `~/.claude/settings.json` (the key is
-`<plugin>@<marketplace>` for an installed plugin, here this repo's marketplace; `/plugin configure custom-compaction@custom-compaction` or
-`claude plugin install ... --config key=value` write it for you):
+Example: summarize with DeepSeek V4.1 Flash on OpenCode Go, in `~/.claude/settings.json` (the key is the
+plugin id, `<plugin>@<marketplace>`: `custom-compaction@rjstone` from the central marketplace;
+`/plugin configure custom-compaction@rjstone` or `claude plugin install ... --config key=value` write
+it for you):
 
 ```json
 {
   "pluginConfigs": {
-    "custom-compaction@custom-compaction": {
+    "custom-compaction@rjstone": {
       "options": {
         "endpoint": "https://opencode.ai/inference/go/v1/chat/completions",
         "apiFormat": "openai",

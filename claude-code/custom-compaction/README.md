@@ -44,16 +44,24 @@ Design notes: [docs/design.md](../../docs/design.md). Live tests:
 
 Paths below are relative to this repository's root.
 
-**Install** (terminal session):
+**Install** from the central marketplace, [rjstone/plugin-marketplace](https://github.com/rjstone/plugin-marketplace)
+(terminal session):
 
 ```
-/plugin install custom-compaction --marketplace rjstone/custom-compaction-plugin
+/plugin marketplace add rjstone/plugin-marketplace
+/plugin install custom-compaction@rjstone
 ```
 
-From a shell: `claude plugin install custom-compaction --marketplace rjstone/custom-compaction-plugin`.
-Answer `y` to add the marketplace, then pick a scope (user scope loads it in every later
-session). In the desktop app: click + next to the prompt, then Plugins > Add marketplace
-`rjstone/custom-compaction-plugin` > Add plugin.
+From a shell, in one step: `claude plugin install custom-compaction --marketplace rjstone/plugin-marketplace`
+(add `--scope project` for the current project only, and `--config key=value` per option). Answer `y`
+to add the marketplace, then pick a scope (user scope loads it in every later session). In the
+desktop app: click + next to the prompt, then Plugins > Add marketplace `rjstone/plugin-marketplace` >
+Add plugin. Tested 2026-11-27: installed at project scope with `--config`, it replaced a `/compact`
+through the DeepSeek endpoint.
+
+The central marketplace lists this plugin at its latest release tag (pinned by commit). This repo
+is also a marketplace (`--marketplace rjstone/custom-compaction-plugin`, plugin id
+`custom-compaction@custom-compaction`), which follows `main`.
 
 **Try it for one session** without installing:
 
@@ -78,9 +86,9 @@ its first moments without the mod (see [live tests](../../docs/live-tests.md)).
 ## Options (`userConfig`)
 
 Set these in `/config`, or in settings.json under
-`pluginConfigs["<plugin>@<marketplace>"].options`, keyed by the marketplace you installed from:
-`custom-compaction@custom-compaction` from this repo's marketplace, `custom-compaction@rjstone` from
-[rjstone/plugin-marketplace](https://github.com/rjstone/plugin-marketplace) (both live-tested
+`pluginConfigs["<plugin>@<marketplace>"].options`, keyed by the plugin id, which depends on the marketplace you installed from:
+`custom-compaction@rjstone` from the central [rjstone/plugin-marketplace](https://github.com/rjstone/plugin-marketplace),
+`custom-compaction@custom-compaction` from this repo's own marketplace (both live-tested
 2026-11-27), or `custom-compaction@inline` for a `--plugin-dir` load. `claude plugin install ... --config key=value` stores them there too.
 
 | Option | Default | Meaning |
@@ -108,7 +116,7 @@ Set these in `/config`, or in settings.json under
 ```json
 {
   "pluginConfigs": {
-    "custom-compaction@custom-compaction": {
+    "custom-compaction@rjstone": {
       "options": {
         "mode": "replace",
         "endpoint": "https://opencode.ai/inference/go/v1/chat/completions",
