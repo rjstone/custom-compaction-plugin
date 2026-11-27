@@ -68,6 +68,6 @@ somewhat better. An override option (`charsPerToken`) would cover models that do
 ## Releases
 
 - v0.6.0 has a tag but no GitHub Release (the release workflow didn't exist yet): create one by hand.
-- Optional: copy the marketplace's notify workflow into this repo so new tags reach
-  `rjstone/plugin-marketplace` at once instead of on its daily run.
+- Set up the notify workflow's GitHub App: `MARKETPLACE_APP_ID` (variable) and
+  `MARKETPLACE_APP_PRIVATE_KEY` (secret) in this repo; the workflow file is in place.
 

@@ -49,8 +49,10 @@ Releasing `vX.Y.Z`:
    `git tag vX.Y.Z && git push origin vX.Y.Z`). Cloud agent sessions can't push tags: ask the
    maintainer. `.github/workflows/release.yml` then publishes a GitHub Release with git-cliff's
    notes for that tag.
-4. The `rjstone/plugin-marketplace` update job picks up the new tag (daily, or at once if this repo
-   has its notify workflow) and points the `custom-compaction@rjstone` entry at it.
+4. The `rjstone/plugin-marketplace` update job picks up the new tag: at once through this repo's
+   `.github/workflows/notify-marketplace.yml` (needs the `MARKETPLACE_APP_ID` variable and
+   `MARKETPLACE_APP_PRIVATE_KEY` secret; run it by hand from the Actions tab for an older tag), else at
+   its daily run. It points the `custom-compaction@rjstone` entry at the new release.
 
 Tags must be `vX.Y.Z` (the marketplace ignores other forms, including `claude plugin tag`'s
 `name--vX.Y.Z`).
