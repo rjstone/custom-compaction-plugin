@@ -14,6 +14,7 @@ commit history (see `cliff.toml`); don't edit by hand.
 
 - **claude-code:** Estimate 3 characters per token for the summarizer budget ([deb3223](https://github.com/rjstone/custom-compaction-plugin/commit/deb32231add3e68f0b03c8cd914c68fe48de7c81))
 - **claude-code:** Review fixes before v0.7.0 ([a73269b](https://github.com/rjstone/custom-compaction-plugin/commit/a73269b032d24f4256b08c479103523c3ac21028))
+- **claude-code:** Keep the endpoint query string; add missing tests; TODO.md ([c4f9a54](https://github.com/rjstone/custom-compaction-plugin/commit/c4f9a54c02292849d6097cee1f31daedb3b2c132))
 
 ### Documentation
 
