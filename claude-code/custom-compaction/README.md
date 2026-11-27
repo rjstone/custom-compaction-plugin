@@ -63,6 +63,21 @@ The central marketplace lists this plugin at its latest release tag (pinned by c
 is also a marketplace (`--marketplace rjstone/custom-compaction-plugin`, plugin id
 `custom-compaction@custom-compaction`), which follows `main`.
 
+**Recommended: let other plugins' compaction hooks run first.** Add the plugin id to `appendPlugins`
+in your **user** settings (`~/.claude/settings.json`; `--settings` and project settings don't count):
+
+```json
+{ "appendPlugins": ["custom-compaction@rjstone"] }
+```
+
+That seats the mod in the `append` tier, after every ordinary (`user`-tier) plugin, so mods such as
+Token Optimizer run their `session.compact` hooks first and see this mod's result. Built-in plugins
+(e.g. `cc-plugin-agents-md`) and Claude Code's own compaction stay beneath it and still don't run.
+Tested 2026-11-27 on Claude Code 2.1.332: the debug log shows `tier append` and the chain
+`token-optimizer → custom-compaction (append) → cc-plugin-agents-md`. Claude Code ignores the list on
+Team and Enterprise plans, with a managed MCP server file, or with the HIPAA mod (an organization
+seats plugins there instead). For a `--plugin-dir` load the id is `custom-compaction@inline`.
+
 **Try it for one session** without installing:
 
 ```sh
@@ -250,7 +265,8 @@ is also where `saveSummaries` writes. The built-in system prompt is a good start
 ## Known gaps / ideas
 
 - **Other plugins' compaction hooks.** This mod answers `session.compact` without calling `next(e)`,
-  so mods *beneath* it in the chain (for example Claude Code's built-in `cc-plugin-agents-md`, or Token
+  so mods *beneath* it in the chain (put it in `appendPlugins`, see [Using it](#using-it), so only
+  built-in plugins are beneath it) (for example Claude Code's built-in `cc-plugin-agents-md`, or Token
   Optimizer when it loads after this mod) don't see that compaction. Mods above it, and shell
   `PostCompact` / `SessionStart:compact` hooks, still run. Calling `next(e)` isn't a fix: it always ends
   in Claude Code's own compaction (`next.to` only skips deeper), so every compaction would also run the

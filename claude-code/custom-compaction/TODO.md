@@ -53,7 +53,8 @@ somewhat better. An override option (`charsPerToken`) would cover models that do
 - **Other plugins' `session.compact` hooks don't run** for a compaction this mod answers. `next(e)` can't
   fix it: it always ends in Claude Code's own compaction (`next.to` only skips to a deeper tier), so it
   would double every compaction. Needs an engine API to call the plugins beneath without core, or a
-  shared event other mods can observe. Documented in the README.
+  shared event other mods can observe. Partial fix today: `appendPlugins` in user settings seats the mod
+  after all `user`-tier plugins (README, "Using it"); only built-in plugins stay beneath it.
 
 ## Smaller items (from the 0.7.0 review)
 
