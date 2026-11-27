@@ -42,6 +42,7 @@ commit_preprocessors = [
 ]
 commit_parsers = [
   { message = "^Initial commit", skip = true },
+  { message = "^Merge (pull request|branch)", skip = true },
   { message = "^chore\\(release\\)", skip = true },
   { message = "^feat", group = "<!-- 0 -->Features" },
   { message = "^fix", group = "<!-- 1 -->Fixes" },
