@@ -17,8 +17,8 @@ in `docs/`, tooling in `tools/`.
 - Every plugin listed in `.claude-plugin/marketplace.json` uses a relative `source` under its
   harness folder.
 - **Shared icon:** `assets/icon.png` (square PNG, 512-2048 px, under 2 MB; no SVG or WebP) is the one to
-  edit. Each plugin folder carries an identical copy (for Claude Code: `.claude-plugin/icon.png`, named by
-  `"icon"` in `plugin.json`), because an install only fetches the plugin folder. After changing the icon,
+  edit. Each plugin folder carries an identical copy (for Claude Code: `.claude-plugin/icon.png`, found there
+  with no `"icon"` key in `plugin.json`: the claude.ai marketplace sync warns about that key as unknown), because an install only fetches the plugin folder. After changing the icon,
   copy it to every plugin folder; CI (`.github/workflows/check.yml`) fails if a copy differs.
 - Keep docs in sync: a behaviour change updates the plugin README, and a new finding or test
   result goes in `docs/` with the date and the harness version tested.
